@@ -1,0 +1,22 @@
+# ─── Netlify configuration ──────────────────────────────────────────────────
+
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+
+# ─── SPA redirect rule ──────────────────────────────────────────────────────
+# All paths fall through to index.html so React Router handles routing.
+# Without this, refreshing a deep route (e.g. /services/aadhaar) would
+# return Netlify's 404 page instead of the React app.
+
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# ─── Environment variables (set these in the Netlify dashboard) ─────────────
+# VITE_SUPABASE_URL      – e.g. https://xyzcompany.supabase.co
+# VITE_SUPABASE_ANON_KEY – your project's anon/public key
+#
+# The app works without these vars; pages that require authentication will
+# show a friendly "service not yet configured" notice instead of crashing.

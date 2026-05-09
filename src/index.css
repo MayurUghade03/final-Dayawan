@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dayawan Multiservices — Design System
+   Vibrant, energetic, trustworthy. Deep indigo primary + warm saffron accent on clean white.
+   Typography: Plus Jakarta Sans (Latin) + Noto Sans Devanagari (Marathi/Hindi).
+   All colors HSL.
+*/
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;          /* deep navy */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: vibrant indigo — modern, energetic, trustworthy */
+    --primary: 245 78% 54%;             /* #4f40ee */
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 245 80% 96%;
+    --primary-hover: 245 78% 47%;
+
+    /* Secondary / Accent: warm saffron-orange for highlights & CTAs */
+    --secondary: 32 96% 52%;            /* #f97316 */
+    --secondary-foreground: 0 0% 100%;
+    --secondary-soft: 32 96% 95%;
+
+    --muted: 240 10% 96%;
+    --muted-foreground: 240 6% 47%;
+
+    --accent: 245 80% 96%;
+    --accent-foreground: 245 78% 40%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 56% 38%;
+    --warning: 38 92% 50%;
+    --info: 199 89% 48%;
+
+    --border: 240 8% 90%;
+    --input: 240 8% 90%;
+    --ring: 245 78% 54%;
+
+    --radius: 0.875rem;
+
+    --shadow-soft: 0 1px 2px hsl(222 47% 11% / 0.04), 0 1px 3px hsl(222 47% 11% / 0.04);
+    --shadow-card: 0 4px 14px -6px hsl(222 47% 11% / 0.10), 0 2px 4px -2px hsl(222 47% 11% / 0.05);
+    --shadow-pop: 0 12px 32px -12px hsl(245 78% 54% / 0.28);
+
+    --gradient-hero: radial-gradient(1200px 500px at 90% -10%, hsl(245 78% 54% / 0.12), transparent 60%),
+                     radial-gradient(900px 400px at -10% 110%, hsl(32 96% 52% / 0.10), transparent 60%);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 245 78% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 245 80% 96%;
+    --sidebar-accent-foreground: 245 78% 40%;
+    --sidebar-border: 240 8% 90%;
+    --sidebar-ring: 245 78% 54%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html[lang="mr"], html[lang="hi"] {
+    font-family: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-size: 16px;
+    line-height: 1.65;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-bold tracking-tight text-foreground;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+
+  /* Larger tap targets on mobile */
+  button, a {
+    @apply min-h-[44px] inline-flex items-center;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+  }
+}
+
+@layer components {
+  .container-rural {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+  .section-pad {
+    @apply py-14 sm:py-20;
+  }
+  .card-soft {
+    @apply rounded-2xl bg-card border border-border transition-all duration-200;
+    box-shadow: var(--shadow-soft);
+  }
+  .card-soft:hover {
+    box-shadow: var(--shadow-card);
+    border-color: hsl(var(--primary) / 0.30);
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold;
+    min-height: 0;
+  }
+  .chip-primary {
+    background: hsl(var(--primary-soft));
+    color: hsl(var(--primary));
+  }
+  .chip-secondary {
+    background: hsl(var(--secondary-soft));
+    color: hsl(32 96% 35%);
+  }
+  .heading-eyebrow {
+    @apply text-xs sm:text-sm font-semibold uppercase tracking-[0.14em] text-primary;
+    min-height: 0;
+  }
+  .hero-bg {
+    background: var(--gradient-hero);
+  }
+}

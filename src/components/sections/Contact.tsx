@@ -1,0 +1,139 @@
+import { useLang } from "@/i18n/LanguageContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Phone, MapPin, Clock, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { z } from "zod";
+
+const PHONE = "+919999999999";
+
+const schema = z.object({
+  name: z.string().trim().min(2).max(80),
+  phone: z.string().trim().min(7).max(15).regex(/^[0-9+\-\s]+$/),
+  message: z.string().trim().min(3).max(1000),
+});
+
+export function Contact({ withHeading = true }: { withHeading?: boolean }) {
+  const { t } = useLang();
+  const [form, setForm] = useState({ name: "", phone: "", message: "" });
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = schema.safeParse(form);
+    if (!parsed.success) {
+      toast.error(t("form_error"));
+      return;
+    }
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 700));
+    toast.success(t("form_success"));
+    setForm({ name: "", phone: "", message: "" });
+    setLoading(false);
+  };
+
+  return (
+    <section id="contact" className="section-pad bg-muted/40 border-t border-border">
+      <div className="container-rural">
+        {withHeading && (
+          <div className="text-center mb-12 max-w-2xl mx-auto">
+            <div className="heading-eyebrow mb-3">{t("nav_contact")}</div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-3">{t("contact_title")}</h2>
+            <p className="text-muted-foreground">{t("contact_sub")}</p>
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <a href={`tel:${PHONE}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
+              <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shrink-0">
+                <Phone className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("contact_phone")}</div>
+                <div className="text-primary font-bold text-lg" dir="ltr">{PHONE}</div>
+              </div>
+            </a>
+
+            <div className="card-soft p-5 flex items-start gap-4">
+              <div className="h-12 w-12 rounded-xl bg-secondary-soft flex items-center justify-center shrink-0">
+                <MapPin className="h-5 w-5 text-secondary" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("contact_address")}</div>
+                <div className="text-foreground font-medium">{t("address_value")}</div>
+              </div>
+            </div>
+
+            <div className="card-soft p-5 flex items-start gap-4">
+              <div className="h-12 w-12 rounded-xl bg-primary-soft flex items-center justify-center shrink-0">
+                <Clock className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("contact_hours")}</div>
+                <div className="text-foreground font-medium">{t("hours_value")}</div>
+              </div>
+            </div>
+
+            <div className="card-soft overflow-hidden">
+              <iframe
+                title="Map - Bhalegaon"
+                src="https://www.google.com/maps?q=Bhalegaon+Mehkar+Buldhana&output=embed"
+                className="w-full h-64 border-0"
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <form onSubmit={submit} className="card-soft p-6 sm:p-7 space-y-5 h-fit">
+            <div>
+              <Label htmlFor="name" className="text-sm font-semibold">{t("form_name")}</Label>
+              <Input
+                id="name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="mt-1.5 h-12 text-base rounded-xl"
+                maxLength={80}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="phone" className="text-sm font-semibold">{t("form_phone")}</Label>
+              <Input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="mt-1.5 h-12 text-base rounded-xl"
+                maxLength={15}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="message" className="text-sm font-semibold">{t("form_message")}</Label>
+              <Textarea
+                id="message"
+                value={form.message}
+                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                className="mt-1.5 text-base rounded-xl min-h-[140px]"
+                maxLength={1000}
+                required
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-primary hover:bg-primary-hover text-primary-foreground text-base font-semibold rounded-xl"
+            >
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("form_submit")}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
