@@ -363,15 +363,13 @@ async function uploadDocuments({
   for (const [label, file] of entries) {
     if (!file) continue;
     const ext = getFileExtension(file.name);
-    const storagePath = `${userId}/${serviceId}/${Date.now()}-${crypto.randomUUID()}${ext}`;
+    const storagePath = `${userId}/${serviceId}/${Date.now()}-${generateStorageId()}${ext}`;
     const { error } = await supabase.storage.from("application-documents").upload(storagePath, file);
     if (error) throw error;
-    const { data } = supabase.storage.from("application-documents").getPublicUrl(storagePath);
 
     uploaded.push({
       name: label,
       path: storagePath,
-      url: data.publicUrl,
       size: file.size,
       uploaded_at: new Date().toISOString(),
     });
@@ -384,4 +382,11 @@ function getFileExtension(name: string): string {
   const idx = name.lastIndexOf(".");
   if (idx <= 0 || idx === name.length - 1) return "";
   return name.slice(idx).replace(/[^a-zA-Z0-9.]/g, "");
+}
+
+function generateStorageId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2, 14);
 }

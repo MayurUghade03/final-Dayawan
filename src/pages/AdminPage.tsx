@@ -6,7 +6,7 @@ import { STATUS_FLOW, useApplications } from "@/contexts/ApplicationContext";
 import { Navigate } from "react-router-dom";
 import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
-import type { ApplicationStatus, Database, FormFieldType, ManagedService, ServiceCategory, UserProfile } from "@/types";
+import type { ApplicationStatus, Database, FormFieldType, ManagedService, ServiceCategory, SubmittedDocument, UserProfile } from "@/types";
 import { useEffect, useMemo, useState } from "react";
 import { useServiceCatalog } from "@/contexts/ServiceCatalogContext";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,25 @@ const AdminPage = () => {
     setUsers((prev) => prev.map((item) => (item.id === profile.id ? normalizeUserProfile(data) : item)));
     toast.success("User updated.");
     setSavingUserId("");
+  };
+
+  const openDocument = async (documentItem: SubmittedDocument) => {
+    if (documentItem.url) {
+      window.open(documentItem.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!documentItem.path || !supabase) return;
+
+    const { data, error } = await supabase.storage
+      .from("application-documents")
+      .createSignedUrl(documentItem.path, 300);
+
+    if (error || !data?.signedUrl) {
+      toast.error("Unable to open document.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -531,11 +550,15 @@ const AdminPage = () => {
                         <div className="space-y-1">
                           <div className="font-semibold text-foreground/80">Documents</div>
                           {app.submitted_documents.map((documentItem, index) => (
-                            <div key={`${documentItem.name}-${index}`}>
-                              {documentItem.url ? (
-                                <a href={documentItem.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                            <div key={documentItem.path || documentItem.url || `${documentItem.name}-${index}`}>
+                              {documentItem.path || documentItem.url ? (
+                                <button
+                                  type="button"
+                                  className="text-primary hover:underline min-h-0"
+                                  onClick={() => void openDocument(documentItem)}
+                                >
                                   {documentItem.name}
-                                </a>
+                                </button>
                               ) : (
                                 <span>{documentItem.name}</span>
                               )}

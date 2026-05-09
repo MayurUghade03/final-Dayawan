@@ -312,8 +312,8 @@ on conflict (id) do update set
   full_name = excluded.full_name;
 
 insert into storage.buckets (id, name, public)
-values ('application-documents', 'application-documents', true)
-on conflict (id) do nothing;
+values ('application-documents', 'application-documents', false)
+on conflict (id) do update set public = excluded.public;
 
 drop policy if exists "application_documents_select" on storage.objects;
 create policy "application_documents_select"

@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 const PHONE = "+919999999999";
+const LOCATION_LAT = 20.2206441;
+const LOCATION_LNG = 76.5570153;
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -81,7 +83,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
             <div className="card-soft overflow-hidden mt-2">
               <iframe
                 title="Map - Bhalegaon"
-                src="https://www.google.com/maps?q=20.2206441,76.5570153&z=16&output=embed"
+                src={`https://www.google.com/maps?q=${LOCATION_LAT},${LOCATION_LNG}&z=16&output=embed`}
                 className="w-full h-80 border-0"
                 loading="lazy"
               />
