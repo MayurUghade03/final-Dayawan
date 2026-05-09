@@ -36,7 +36,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
   };
 
   return (
-    <section id="contact" className="section-pad bg-muted/40 border-t border-border">
+    <section id="contact" className="section-pad bg-muted/30 border-t border-border">
       <div className="container-rural">
         {withHeading && (
           <div className="text-center mb-12 max-w-2xl mx-auto">
@@ -46,8 +46,8 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
+          <div className="space-y-5">
             <a href={`tel:${PHONE}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
               <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shrink-0">
                 <Phone className="h-5 w-5 text-primary-foreground" />
@@ -78,17 +78,17 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
               </div>
             </div>
 
-            <div className="card-soft overflow-hidden">
+            <div className="card-soft overflow-hidden mt-2">
               <iframe
                 title="Map - Bhalegaon"
-                src="https://www.google.com/maps?q=Bhalegaon+Mehkar+Buldhana&output=embed"
-                className="w-full h-64 border-0"
+                src="https://www.google.com/maps?q=20.2206441,76.5570153&z=16&output=embed"
+                className="w-full h-80 border-0"
                 loading="lazy"
               />
             </div>
           </div>
 
-          <form onSubmit={submit} className="card-soft p-6 sm:p-7 space-y-5 h-fit">
+          <form onSubmit={submit} className="card-soft p-7 sm:p-8 space-y-6 h-fit">
             <div>
               <Label htmlFor="name" className="text-sm font-semibold">{t("form_name")}</Label>
               <Input

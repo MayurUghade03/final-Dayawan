@@ -10,11 +10,12 @@ import { FileSearch } from "lucide-react";
 
 const DashboardPage = () => {
   const { t } = useLang();
-  const { status } = useAuth();
+  const { status, isAdmin } = useAuth();
   const { myApplications } = useApplications();
 
   if (status === "unauthenticated") return <Navigate to="/login" replace state={{ from: "/dashboard" }} />;
   if (status === "loading") return null;
+  if (isAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

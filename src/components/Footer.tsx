@@ -1,6 +1,7 @@
 import { useLang } from "@/i18n/LanguageContext";
-import { Sprout, Phone, MapPin, Mail } from "lucide-react";
+import { Phone, MapPin, Mail } from "lucide-react";
 import { Link } from "react-router-dom";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Footer() {
   const { t } = useLang();
@@ -9,9 +10,7 @@ export function Footer() {
       <div className="container-rural py-12 grid gap-10 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-              <Sprout className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <BrandLogo fallbackClassName="border-background/30 bg-background/5" />
             <div>
               <div className="font-extrabold text-base text-background">{t("brand")}</div>
               <div className="text-xs text-background/60">{t("brand_tag")}</div>

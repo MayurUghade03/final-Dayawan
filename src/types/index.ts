@@ -5,6 +5,8 @@ export type Lang = "mr" | "hi" | "en";
 export type ServiceCategory = "gov" | "farm" | "online";
 export type PaymentProvider = "none" | "stripe" | "razorpay";
 export type FormFieldType = "text" | "number" | "date" | "textarea";
+export type UserRole = "admin" | "citizen";
+export type UserStatus = "active" | "suspended";
 
 export interface ServiceItem {
   id: string;
@@ -49,7 +51,7 @@ export interface ServiceApplication {
   status: ApplicationStatus;
   admin_notes?: string;
   submitted_payload?: Record<string, string>;
-  submitted_documents?: string[];
+  submitted_documents?: SubmittedDocument[];
   payment_status: "pending" | "paid";
   payment_provider: PaymentProvider;
   payment_reference?: string;
@@ -64,11 +66,31 @@ export interface ApplyFormData {
   service_id: string;
   service_name: string;
   form_payload?: Record<string, string>;
-  submitted_documents?: string[];
+  submitted_documents?: SubmittedDocument[];
   payment_status?: "pending" | "paid";
   payment_provider?: PaymentProvider;
   payment_reference?: string;
   amount?: number;
+}
+
+export interface SubmittedDocument {
+  name: string;
+  path?: string;
+  url?: string;
+  size?: number;
+  uploaded_at?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  phone?: string;
+  role: UserRole;
+  status: UserStatus;
+  suspended_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ServiceFormField {
@@ -131,7 +153,7 @@ export interface Database {
           status: ApplicationStatus;
           admin_notes: string | null;
           submitted_payload: Record<string, string> | null;
-          submitted_documents: string[] | null;
+          submitted_documents: SubmittedDocument[] | null;
           payment_status: "pending" | "paid";
           payment_provider: PaymentProvider | null;
           payment_reference: string | null;
@@ -151,7 +173,7 @@ export interface Database {
           status?: ApplicationStatus;
           admin_notes?: string | null;
           submitted_payload?: Record<string, string> | null;
-          submitted_documents?: string[] | null;
+          submitted_documents?: SubmittedDocument[] | null;
           payment_status?: "pending" | "paid";
           payment_provider?: PaymentProvider | null;
           payment_reference?: string | null;
@@ -170,7 +192,7 @@ export interface Database {
           status?: ApplicationStatus;
           admin_notes?: string | null;
           submitted_payload?: Record<string, string> | null;
-          submitted_documents?: string[] | null;
+          submitted_documents?: SubmittedDocument[] | null;
           payment_status?: "pending" | "paid";
           payment_provider?: PaymentProvider | null;
           payment_reference?: string | null;
@@ -221,6 +243,39 @@ export interface Database {
           payment_provider?: PaymentProvider;
           form_schema?: ServiceFormField[];
           active?: boolean;
+        };
+      };
+      user_profiles: {
+        Row: {
+          id: string;
+          email: string;
+          full_name: string;
+          phone: string | null;
+          role: UserRole;
+          status: UserStatus;
+          suspended_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email: string;
+          full_name?: string;
+          phone?: string | null;
+          role?: UserRole;
+          status?: UserStatus;
+          suspended_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          email?: string;
+          full_name?: string;
+          phone?: string | null;
+          role?: UserRole;
+          status?: UserStatus;
+          suspended_at?: string | null;
+          updated_at?: string;
         };
       };
     };

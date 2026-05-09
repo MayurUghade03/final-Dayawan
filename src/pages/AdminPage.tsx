@@ -6,13 +6,14 @@ import { STATUS_FLOW, useApplications } from "@/contexts/ApplicationContext";
 import { Navigate } from "react-router-dom";
 import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
-import type { ApplicationStatus, FormFieldType, ManagedService, ServiceCategory } from "@/types";
+import type { ApplicationStatus, Database, FormFieldType, ManagedService, ServiceCategory, UserProfile } from "@/types";
 import { useEffect, useMemo, useState } from "react";
 import { useServiceCatalog } from "@/contexts/ServiceCatalogContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const STATUS_LABEL_KEYS: Record<ApplicationStatus, "status_submitted" | "status_received" | "status_processing" | "status_ready" | "status_completed"> = {
   submitted: "status_submitted",
@@ -31,6 +32,9 @@ const AdminPage = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [editingService, setEditingService] = useState<ManagedService | null>(null);
   const [savingService, setSavingService] = useState(false);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [savingUserId, setSavingUserId] = useState<string>("");
 
   useEffect(() => {
     if (!selectedServiceId && services.length > 0) setSelectedServiceId(services[0].id);
@@ -40,6 +44,27 @@ const AdminPage = () => {
     const selected = services.find((service) => service.id === selectedServiceId);
     if (selected) setEditingService({ ...selected, form_schema: [...selected.form_schema], required_documents: [...selected.required_documents] });
   }, [selectedServiceId, services]);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!isSupabaseConfigured || !supabase || status !== "authenticated" || !isAdmin) return;
+
+      setLoadingUsers(true);
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Failed to load user profiles:", error);
+      } else {
+        setUsers((data ?? []).map(normalizeUserProfile));
+      }
+      setLoadingUsers(false);
+    };
+
+    void loadUsers();
+  }, [status, isAdmin]);
 
   const serviceOptions = useMemo(() => services.map((service) => ({ id: service.id, label: service.title })), [services]);
 
@@ -66,6 +91,37 @@ const AdminPage = () => {
     } finally {
       setSavingService(false);
     }
+  };
+
+  const saveUser = async (profile: UserProfile) => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    setSavingUserId(profile.id);
+    const payload: Database["public"]["Tables"]["user_profiles"]["Update"] = {
+      email: profile.email.trim().toLowerCase(),
+      full_name: profile.full_name.trim() || profile.email,
+      phone: profile.phone?.trim() || null,
+      role: profile.role,
+      status: profile.status,
+      suspended_at: profile.status === "suspended" ? (profile.suspended_at ?? new Date().toISOString()) : null,
+    };
+
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update(payload)
+      .eq("id", profile.id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      toast.error("Failed to update user.");
+      setSavingUserId("");
+      return;
+    }
+
+    setUsers((prev) => prev.map((item) => (item.id === profile.id ? normalizeUserProfile(data) : item)));
+    toast.success("User updated.");
+    setSavingUserId("");
   };
 
   return (
@@ -335,6 +391,92 @@ const AdminPage = () => {
             </div>
 
             <div className="space-y-4">
+              <h2 className="font-bold text-xl">User Management</h2>
+              <div className="card-soft p-5 space-y-4">
+                {!isSupabaseConfigured ? (
+                  <div className="text-sm text-muted-foreground">
+                    User management is available when Supabase is configured.
+                  </div>
+                ) : loadingUsers ? (
+                  <div className="text-sm text-muted-foreground">Loading users...</div>
+                ) : users.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No users found.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {users.map((profile) => (
+                      <div key={profile.id} className="rounded-xl border border-border p-4 grid lg:grid-cols-5 gap-3">
+                        <div className="lg:col-span-2 space-y-1">
+                          <Label>Name</Label>
+                          <Input
+                            value={profile.full_name}
+                            onChange={(e) =>
+                              setUsers((prev) => prev.map((u) => (u.id === profile.id ? { ...u, full_name: e.target.value } : u)))
+                            }
+                          />
+                          <Input
+                            value={profile.email}
+                            onChange={(e) =>
+                              setUsers((prev) => prev.map((u) => (u.id === profile.id ? { ...u, email: e.target.value } : u)))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label>Phone</Label>
+                          <Input
+                            value={profile.phone ?? ""}
+                            onChange={(e) =>
+                              setUsers((prev) => prev.map((u) => (u.id === profile.id ? { ...u, phone: e.target.value } : u)))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label>Role</Label>
+                          <select
+                            className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
+                            value={profile.role}
+                            onChange={(e) =>
+                              setUsers((prev) =>
+                                prev.map((u) => (u.id === profile.id ? { ...u, role: e.target.value as UserProfile["role"] } : u)),
+                              )
+                            }
+                          >
+                            <option value="citizen">Citizen</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Status</Label>
+                          <select
+                            className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
+                            value={profile.status}
+                            onChange={(e) =>
+                              setUsers((prev) =>
+                                prev.map((u) => (u.id === profile.id ? { ...u, status: e.target.value as UserProfile["status"] } : u)),
+                              )
+                            }
+                          >
+                            <option value="active">Active</option>
+                            <option value="suspended">Suspended</option>
+                          </select>
+                        </div>
+                        <div className="lg:col-span-5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void saveUser(profile)}
+                            disabled={savingUserId === profile.id}
+                          >
+                            {savingUserId === profile.id ? "Saving..." : "Save user"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
               <h2 className="font-bold text-xl">Application Queue</h2>
               {applications.map((app) => (
                 <div key={app.id} className="card-soft p-5">
@@ -386,7 +528,20 @@ const AdminPage = () => {
                   {(app.submitted_documents?.length || app.submitted_payload) && (
                     <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground space-y-1">
                       {app.submitted_documents && app.submitted_documents.length > 0 && (
-                        <div>Documents: {app.submitted_documents.join(", ")}</div>
+                        <div className="space-y-1">
+                          <div className="font-semibold text-foreground/80">Documents</div>
+                          {app.submitted_documents.map((documentItem, index) => (
+                            <div key={`${documentItem.name}-${index}`}>
+                              {documentItem.url ? (
+                                <a href={documentItem.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                  {documentItem.name}
+                                </a>
+                              ) : (
+                                <span>{documentItem.name}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                       {app.submitted_payload && Object.entries(app.submitted_payload).map(([key, value]) => (
                         <div key={key}>{key}: {value}</div>
@@ -405,3 +560,17 @@ const AdminPage = () => {
 };
 
 export default AdminPage;
+
+function normalizeUserProfile(row: Database["public"]["Tables"]["user_profiles"]["Row"]): UserProfile {
+  return {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    phone: row.phone ?? undefined,
+    role: row.role,
+    status: row.status,
+    suspended_at: row.suspended_at ?? undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

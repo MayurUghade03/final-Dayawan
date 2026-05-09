@@ -108,10 +108,10 @@
 
 @layer components {
   .container-rural {
-    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-8;
   }
   .section-pad {
-    @apply py-14 sm:py-20;
+    @apply py-16 sm:py-24;
   }
   .card-soft {
     @apply rounded-2xl bg-card border border-border transition-all duration-200;

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { User, Session, AuthError } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import type { Database, UserProfile, UserRole } from "@/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,9 @@ interface AuthCtx {
   session: Session | null;
   status: AuthStatus;
   isAdmin: boolean;
+  role: UserRole;
+  profile: UserProfile | null;
+  isSuspended: boolean;
   /** True when VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are present. */
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<AuthError | null>;
@@ -36,12 +40,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<UserRole>("citizen");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       // No backend — skip loading, stay unauthenticated.
       setStatus("unauthenticated");
       setIsAdmin(false);
+      setRole("citizen");
+      setProfile(null);
+      setIsSuspended(false);
       return;
     }
 
@@ -63,6 +73,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user) {
+      setProfile(null);
+      setRole(computeAdminFlag(user) ? "admin" : "citizen");
+      setIsAdmin(computeAdminFlag(user));
+      setIsSuspended(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUserProfile = async () => {
+      const fallbackRole: UserRole = computeAdminFlag(user) ? "admin" : "citizen";
+
+      const { data: existing, error: selectError } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (selectError) {
+        console.error("Failed to load user profile:", selectError);
+        setProfile(null);
+        setRole(fallbackRole);
+        setIsAdmin(fallbackRole === "admin");
+        setIsSuspended(false);
+        return;
+      }
+
+      let profileRow = existing;
+      if (!profileRow) {
+        const { data: inserted, error: insertError } = await supabase
+          .from("user_profiles")
+          .insert({
+            id: user.id,
+            email: user.email ?? "",
+            full_name: String(user.user_metadata?.full_name ?? user.email ?? "User"),
+            role: fallbackRole,
+            status: "active",
+          })
+          .select("*")
+          .single();
+
+        if (cancelled) return;
+
+        if (insertError) {
+          console.error("Failed to create user profile:", insertError);
+          setProfile(null);
+          setRole(fallbackRole);
+          setIsAdmin(fallbackRole === "admin");
+          setIsSuspended(false);
+          return;
+        }
+
+        profileRow = inserted;
+      }
+
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load user profile:", error);
+        setProfile(null);
+        setRole(fallbackRole);
+        setIsAdmin(fallbackRole === "admin");
+        setIsSuspended(false);
+        return;
+      }
+
+      const nextProfile = normalizeProfile(data ?? profileRow);
+      const nextRole: UserRole = nextProfile?.role ?? fallbackRole;
+      const suspended = nextProfile?.status === "suspended";
+
+      setProfile(nextProfile);
+      setRole(nextRole);
+      setIsAdmin(nextRole === "admin");
+      setIsSuspended(suspended);
+
+      if (suspended) {
+        await supabase.auth.signOut();
+      }
+    };
+
+    void loadUserProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // ─── signIn ───────────────────────────────────────────────────────────────
   const signIn = useCallback(
@@ -96,7 +202,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, status, isAdmin, isConfigured: isSupabaseConfigured, signIn, signUp, signOut }}
+      value={{
+        user,
+        session,
+        status,
+        isAdmin,
+        role,
+        profile,
+        isSuspended,
+        isConfigured: isSupabaseConfigured,
+        signIn,
+        signUp,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -139,4 +257,18 @@ function computeAdminFlag(user: User | null): boolean {
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean);
   return adminEmails.includes(user.email.toLowerCase());
+}
+
+function normalizeProfile(row: Database["public"]["Tables"]["user_profiles"]["Row"]): UserProfile {
+  return {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    phone: row.phone ?? undefined,
+    role: row.role,
+    status: row.status,
+    suspended_at: row.suspended_at ?? undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
