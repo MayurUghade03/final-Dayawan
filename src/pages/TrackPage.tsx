@@ -114,6 +114,9 @@ const TrackPage = () => {
                       <div className="font-semibold">{new Date(result.data.updated_at).toLocaleString()}</div>
                     </div>
                   </div>
+                  <div className="mb-6 text-sm text-muted-foreground">
+                    Payment: {result.data.payment_status === "paid" ? "Paid" : "Pending"} {result.data.payment_reference ? `• ${result.data.payment_reference}` : ""}
+                  </div>
 
                   <ol className="relative grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {steps.map((s, i) => {

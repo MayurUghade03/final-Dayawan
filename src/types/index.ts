@@ -3,6 +3,8 @@
 export type Lang = "mr" | "hi" | "en";
 
 export type ServiceCategory = "gov" | "farm" | "online";
+export type PaymentProvider = "none" | "stripe" | "razorpay";
+export type FormFieldType = "text" | "number" | "date" | "textarea";
 
 export interface ServiceItem {
   id: string;
@@ -46,6 +48,12 @@ export interface ServiceApplication {
   service_name: string;
   status: ApplicationStatus;
   admin_notes?: string;
+  submitted_payload?: Record<string, string>;
+  submitted_documents?: string[];
+  payment_status: "pending" | "paid";
+  payment_provider: PaymentProvider;
+  payment_reference?: string;
+  amount: number;
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +63,34 @@ export interface ApplyFormData {
   phone: string;
   service_id: string;
   service_name: string;
+  form_payload?: Record<string, string>;
+  submitted_documents?: string[];
+  payment_status?: "pending" | "paid";
+  payment_provider?: PaymentProvider;
+  payment_reference?: string;
+  amount?: number;
+}
+
+export interface ServiceFormField {
+  id: string;
+  key: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+}
+
+export interface ManagedService {
+  id: string;
+  category: ServiceCategory;
+  title: string;
+  description: string;
+  details?: string;
+  required_documents: string[];
+  fee_amount: number;
+  fee_note?: string;
+  payment_provider: PaymentProvider;
+  form_schema: ServiceFormField[];
+  active: boolean;
 }
 
 // ─── Supabase database types (scaffold — fill in once backend is live) ────────
@@ -94,6 +130,12 @@ export interface Database {
           service_name: string;
           status: ApplicationStatus;
           admin_notes: string | null;
+          submitted_payload: Record<string, string> | null;
+          submitted_documents: string[] | null;
+          payment_status: "pending" | "paid";
+          payment_provider: PaymentProvider | null;
+          payment_reference: string | null;
+          amount: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -108,6 +150,12 @@ export interface Database {
           service_name: string;
           status?: ApplicationStatus;
           admin_notes?: string | null;
+          submitted_payload?: Record<string, string> | null;
+          submitted_documents?: string[] | null;
+          payment_status?: "pending" | "paid";
+          payment_provider?: PaymentProvider | null;
+          payment_reference?: string | null;
+          amount?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -121,8 +169,58 @@ export interface Database {
           service_name?: string;
           status?: ApplicationStatus;
           admin_notes?: string | null;
+          submitted_payload?: Record<string, string> | null;
+          submitted_documents?: string[] | null;
+          payment_status?: "pending" | "paid";
+          payment_provider?: PaymentProvider | null;
+          payment_reference?: string | null;
+          amount?: number | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      services: {
+        Row: {
+          id: string;
+          category: ServiceCategory;
+          title: string;
+          description: string;
+          details: string | null;
+          required_documents: string[];
+          fee_amount: number;
+          fee_note: string | null;
+          payment_provider: PaymentProvider;
+          form_schema: ServiceFormField[];
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          category: ServiceCategory;
+          title: string;
+          description: string;
+          details?: string | null;
+          required_documents?: string[];
+          fee_amount?: number;
+          fee_note?: string | null;
+          payment_provider?: PaymentProvider;
+          form_schema?: ServiceFormField[];
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          category?: ServiceCategory;
+          title?: string;
+          description?: string;
+          details?: string | null;
+          required_documents?: string[];
+          fee_amount?: number;
+          fee_note?: string | null;
+          payment_provider?: PaymentProvider;
+          form_schema?: ServiceFormField[];
+          active?: boolean;
         };
       };
     };

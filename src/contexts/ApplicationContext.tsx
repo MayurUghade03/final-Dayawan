@@ -1,5 +1,4 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { SERVICES } from "@/i18n/translations";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ApplicationStatus, ApplyFormData, ServiceApplication } from "@/types";
 import type { Database } from "@/types";
@@ -28,6 +27,10 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "aadhaar",
     service_name: "Aadhaar Card Service",
     status: "processing",
+    payment_status: "paid",
+    payment_provider: "none",
+    payment_reference: "DUMMY-1024",
+    amount: 50,
     created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -40,6 +43,10 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "pm-kisan",
     service_name: "PM Kisan",
     status: "ready",
+    payment_status: "paid",
+    payment_provider: "none",
+    payment_reference: "DUMMY-1099",
+    amount: 0,
     created_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
   },
@@ -52,6 +59,10 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "pan",
     service_name: "PAN Card",
     status: "received",
+    payment_status: "paid",
+    payment_provider: "none",
+    payment_reference: "DUMMY-1001",
+    amount: 107,
     created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
   },
@@ -105,6 +116,12 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       service_id: data.service_id,
       service_name: data.service_name,
       status: "submitted",
+      submitted_payload: data.form_payload,
+      submitted_documents: data.submitted_documents,
+      payment_status: data.payment_status ?? "pending",
+      payment_provider: data.payment_provider ?? "none",
+      payment_reference: data.payment_reference,
+      amount: data.amount ?? 0,
       created_at: now,
       updated_at: now,
     };
@@ -118,6 +135,12 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
         service_id: data.service_id,
         service_name: data.service_name,
         status: "submitted",
+        submitted_payload: data.form_payload ?? null,
+        submitted_documents: data.submitted_documents ?? null,
+        payment_status: data.payment_status ?? "pending",
+        payment_provider: data.payment_provider ?? "none",
+        payment_reference: data.payment_reference ?? null,
+        amount: data.amount ?? 0,
       };
 
       const { data: inserted, error } = await supabase
@@ -231,7 +254,7 @@ function loadApplications(): ServiceApplication[] {
   try {
     const parsed = JSON.parse(raw) as ServiceApplication[];
     if (!Array.isArray(parsed)) return defaultDemoData;
-    return parsed;
+    return parsed.map(normalizeLocalApplication);
   } catch {
     return defaultDemoData;
   }
@@ -264,7 +287,7 @@ function isUserApplication(app: ServiceApplication, userId: string, userEmail?: 
 }
 
 function normalizeRemoteApplication(row: Database["public"]["Tables"]["service_applications"]["Row"]): ServiceApplication {
-  return {
+    return {
     id: row.id,
     code: row.code,
     user_id: row.user_id ?? undefined,
@@ -274,15 +297,31 @@ function normalizeRemoteApplication(row: Database["public"]["Tables"]["service_a
     service_id: row.service_id,
     service_name: row.service_name,
     status: row.status,
-    admin_notes: row.admin_notes ?? undefined,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+      admin_notes: row.admin_notes ?? undefined,
+      submitted_payload: row.submitted_payload ?? undefined,
+      submitted_documents: row.submitted_documents ?? undefined,
+      payment_status: row.payment_status,
+      payment_provider: row.payment_provider ?? "none",
+      payment_reference: row.payment_reference ?? undefined,
+      amount: row.amount ?? 0,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+  };
+}
+
+function normalizeLocalApplication(app: ServiceApplication): ServiceApplication {
+  return {
+    ...app,
+    submitted_payload:
+      app.submitted_payload && typeof app.submitted_payload === "object" && !Array.isArray(app.submitted_payload)
+        ? app.submitted_payload
+        : undefined,
+    submitted_documents: Array.isArray(app.submitted_documents) ? app.submitted_documents.filter((item) => typeof item === "string") : undefined,
+    payment_status: app.payment_status ?? "pending",
+    payment_provider: app.payment_provider ?? "none",
+    payment_reference: app.payment_reference || undefined,
+    amount: Number.isFinite(app.amount) ? app.amount : 0,
   };
 }
 
 export const STATUS_FLOW: ApplicationStatus[] = ["submitted", "received", "processing", "ready", "completed"];
-
-export function getServiceNameById(serviceId: string): string {
-  const matched = SERVICES.find((s) => s.id === serviceId);
-  return matched?.title.en ?? serviceId;
-}

@@ -68,6 +68,9 @@ const DashboardPage = () => {
                         <div className="font-semibold">{new Date(app.updated_at).toLocaleString()}</div>
                       </div>
                     </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Payment: {app.payment_status === "paid" ? "Paid" : "Pending"} {app.payment_reference ? `(${app.payment_reference})` : ""}
+                    </div>
                   </div>
                 ))}
               </div>

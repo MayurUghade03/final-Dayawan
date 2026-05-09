@@ -1,8 +1,9 @@
 import { useLang } from "@/i18n/LanguageContext";
-import { SERVICES, ServiceItem } from "@/i18n/translations";
+import type { ManagedService } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Building2, Sprout, Globe, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useServiceCatalog } from "@/contexts/ServiceCatalogContext";
 
 const CAT_META = {
   gov: { icon: Building2, key: "cat_gov" as const },
@@ -10,8 +11,7 @@ const CAT_META = {
   online: { icon: Globe, key: "cat_online" as const },
 };
 
-export function ServiceCard({ s }: { s: ServiceItem }) {
-  const { tr } = useLang();
+export function ServiceCard({ s }: { s: ManagedService }) {
   const Icon = CAT_META[s.category].icon;
   return (
     <Link
@@ -21,8 +21,8 @@ export function ServiceCard({ s }: { s: ServiceItem }) {
       <div className="h-11 w-11 rounded-xl bg-primary-soft flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
         <Icon className="h-5 w-5 text-primary group-hover:text-primary-foreground" />
       </div>
-      <h3 className="text-base font-bold text-foreground mb-1.5">{tr(s.title)}</h3>
-      <p className="text-sm text-muted-foreground mb-5 flex-1">{tr(s.desc)}</p>
+      <h3 className="text-base font-bold text-foreground mb-1.5">{s.title}</h3>
+      <p className="text-sm text-muted-foreground mb-5 flex-1">{s.description}</p>
       <div className="flex items-center gap-1.5 text-sm font-semibold text-primary min-h-0">
         <span>View details</span>
         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -33,6 +33,7 @@ export function ServiceCard({ s }: { s: ServiceItem }) {
 
 export function Services({ limit }: { limit?: number }) {
   const { t } = useLang();
+  const { services } = useServiceCatalog();
   const cats: Array<keyof typeof CAT_META> = ["gov", "farm", "online"];
 
   return (
@@ -48,7 +49,7 @@ export function Services({ limit }: { limit?: number }) {
           {cats.map((cat) => {
             const Meta = CAT_META[cat];
             const Icon = Meta.icon;
-            const all = SERVICES.filter((s) => s.category === cat);
+            const all = services.filter((s) => s.category === cat && s.active);
             const items = limit ? all.slice(0, limit) : all;
             return (
               <div key={cat}>

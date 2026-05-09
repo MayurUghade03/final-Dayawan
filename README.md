@@ -49,9 +49,13 @@ This installs all required frontend packages.
 10. Keep these two values ready for next step.
 
 This SQL creates:
-- `service_applications` table
+- `services` table (admin-manageable service catalog + dynamic form schema)
+- `service_applications` table (status, submitted document metadata, payment metadata)
 - automatic tracking code generation (`DYW-1201`, `DYW-1202`, …)
 - security policies (users only see their own records, admins can update status)
+- a bootstrap admin user:
+  - email: `admin@dayawan.local`
+  - password: `Admin@123` (change immediately in production)
 
 ---
 
@@ -85,13 +89,20 @@ Then open the shown URL in browser (usually `http://localhost:5173`).
 
 ---
 
-## 6) How to make someone admin
+## 6) Admin panel and service management
 
 Admin access is controlled by:
 - `VITE_ADMIN_EMAILS` in `.env`
 - and/or user role in Supabase JWT metadata (`role: admin`)
 
-For simple setup, just keep admin emails in `.env`.
+Admin panel capabilities:
+- Update service title/description/details
+- Update required documents and service charges
+- Configure payment readiness (`none` / `stripe` / `razorpay`) with dummy payment flow
+- Create/edit service-specific form fields used on “Apply” page
+- Update application lifecycle status
+
+For simple setup, keep admin emails in `.env` and use the bootstrap admin account.
 
 ---
 
@@ -124,10 +135,10 @@ npm run build
 
 Then manually verify:
 - User registration and login work
-- Service application creates a tracking code
+- Service application creates a tracking code after form + document + dummy payment
 - Tracking page finds that code
 - Dashboard shows user’s own applications
-- Admin account can open `/admin` and update status
+- Admin account can open `/admin` and manage services + update status
 
 ---
 

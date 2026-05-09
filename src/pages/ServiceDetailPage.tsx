@@ -1,27 +1,42 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { SERVICES } from "@/i18n/translations";
 import { useLang } from "@/i18n/LanguageContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, IndianRupee, Clock, Phone, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, FileText, IndianRupee, Phone, CheckCircle2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApplications } from "@/contexts/ApplicationContext";
+import { useServiceCatalog } from "@/contexts/ServiceCatalogContext";
+import { Textarea } from "@/components/ui/textarea";
+
+type FormState = {
+  name: string;
+  phone: string;
+  extraFields: Record<string, string>;
+  submittedDocuments: Record<string, string>;
+  paymentPaid: boolean;
+  paymentRef: string;
+};
 
 const ServiceDetailPage = () => {
   const { id } = useParams();
-  const { t, tr } = useLang();
+  const { t } = useLang();
   const navigate = useNavigate();
   const { user, status } = useAuth();
   const { submitApplication } = useApplications();
-  const service = SERVICES.find((s) => s.id === id);
-  const [form, setForm] = useState({
+  const { getServiceById } = useServiceCatalog();
+  const service = id ? getServiceById(id) : undefined;
+  const [form, setForm] = useState<FormState>({
     name: user?.user_metadata?.full_name ?? "",
     phone: "",
+    extraFields: {},
+    submittedDocuments: {},
+    paymentPaid: false,
+    paymentRef: "",
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,8 +68,8 @@ const ServiceDetailPage = () => {
               <ArrowLeft className="h-4 w-4" /> {t("back")}
             </Link>
             <div className="chip chip-primary mb-4">{t(`cat_${service.category}` as const)}</div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold mb-4 max-w-3xl">{tr(service.title)}</h1>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl">{tr(service.long ?? service.desc)}</p>
+            <h1 className="text-3xl sm:text-5xl font-extrabold mb-4 max-w-3xl">{service.title}</h1>
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl">{service.details || service.description}</p>
           </div>
         </section>
 
@@ -67,10 +82,10 @@ const ServiceDetailPage = () => {
                   <h2 className="text-lg font-bold">{t("required_docs")}</h2>
                 </div>
                 <ul className="grid sm:grid-cols-2 gap-2.5">
-                  {service.docs.map((d, i) => (
-                    <li key={i} className="flex items-start gap-2 p-3 rounded-xl bg-muted/60">
+                  {service.required_documents.map((documentName) => (
+                    <li key={documentName} className="flex items-start gap-2 p-3 rounded-xl bg-muted/60">
                       <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                      <span className="text-sm font-medium text-foreground">{tr(d)}</span>
+                      <span className="text-sm font-medium text-foreground">{documentName}</span>
                     </li>
                   ))}
                 </ul>
@@ -78,28 +93,35 @@ const ServiceDetailPage = () => {
             </div>
 
             <aside className="space-y-4">
-              {service.fee && (
-                <div className="card-soft p-5 flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary-soft flex items-center justify-center shrink-0">
-                    <IndianRupee className="h-5 w-5 text-primary" />
+              <div className="card-soft p-5 flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg bg-primary-soft flex items-center justify-center shrink-0">
+                  <IndianRupee className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</div>
+                  <div className="font-bold text-foreground">
+                    {service.fee_amount > 0 ? `₹${service.fee_amount.toFixed(2)}` : "Free"}
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fee</div>
-                    <div className="font-bold text-foreground">{tr(service.fee)}</div>
+                  {service.fee_note && (
+                    <div className="text-xs text-muted-foreground mt-1">{service.fee_note}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card-soft p-5 flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg bg-secondary-soft flex items-center justify-center shrink-0">
+                  <CreditCard className="h-5 w-5 text-secondary" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment Mode</div>
+                  <div className="font-bold text-foreground">
+                    {service.payment_provider === "none" ? "No gateway selected" : `${service.payment_provider} (dummy)`}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Gateway is kept dummy for now and ready for integration.
                   </div>
                 </div>
-              )}
-              {service.time && (
-                <div className="card-soft p-5 flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-secondary-soft flex items-center justify-center shrink-0">
-                    <Clock className="h-5 w-5 text-secondary" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time</div>
-                    <div className="font-bold text-foreground">{tr(service.time)}</div>
-                  </div>
-                </div>
-              )}
+              </div>
 
               <div className="card-soft p-5">
                 <h3 className="font-bold text-lg mb-1">{t("apply_title")}</h3>
@@ -120,13 +142,40 @@ const ServiceDetailPage = () => {
                       toast.error(t("apply_err_phone"));
                       return;
                     }
+                    const missingDocuments = service.required_documents.filter(
+                      (documentName) => !form.submittedDocuments[documentName]?.trim(),
+                    );
+                    if (missingDocuments.length > 0) {
+                      toast.error(`Missing documents: ${missingDocuments.join(", ")}`);
+                      return;
+                    }
+                    const invalidField = service.form_schema.find((field) => field.required && !form.extraFields[field.key]?.trim());
+                    if (invalidField) {
+                      toast.error(`Please fill: ${invalidField.label}`);
+                      return;
+                    }
+                    if (service.fee_amount > 0 && !form.paymentPaid) {
+                      toast.error("Please complete dummy payment before submit.");
+                      return;
+                    }
                     setSubmitting(true);
                     try {
                       const newApplication = await submitApplication({
                         user_name: form.name.trim(),
                         phone: form.phone.trim(),
                         service_id: service.id,
-                        service_name: tr(service.title),
+                        service_name: service.title,
+                        form_payload: service.form_schema.reduce<Record<string, string>>((acc, field) => {
+                          acc[field.key] = form.extraFields[field.key] ?? "";
+                          return acc;
+                        }, {}),
+                        submitted_documents: service.required_documents
+                          .map((documentName) => form.submittedDocuments[documentName] || "")
+                          .filter((name) => name.trim().length > 0),
+                        payment_status: form.paymentPaid ? "paid" : "pending",
+                        payment_provider: service.payment_provider,
+                        payment_reference: form.paymentRef || undefined,
+                        amount: service.fee_amount,
                       });
                       toast.success(`${t("apply_success")} ${newApplication.code}`);
                       navigate("/dashboard");
@@ -158,6 +207,88 @@ const ServiceDetailPage = () => {
                       disabled={submitting}
                     />
                   </div>
+                  {service.form_schema.map((field) => (
+                    <div key={field.id}>
+                      <Label htmlFor={`apply-extra-${field.id}`}>{field.label}</Label>
+                      {field.type === "textarea" ? (
+                        <Textarea
+                          id={`apply-extra-${field.id}`}
+                          value={form.extraFields[field.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              extraFields: { ...prev.extraFields, [field.key]: e.target.value },
+                            }))
+                          }
+                          className="mt-1.5 rounded-xl"
+                          disabled={submitting}
+                        />
+                      ) : (
+                        <Input
+                          id={`apply-extra-${field.id}`}
+                          type={field.type}
+                          value={form.extraFields[field.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              extraFields: { ...prev.extraFields, [field.key]: e.target.value },
+                            }))
+                          }
+                          className="mt-1.5 rounded-xl"
+                          disabled={submitting}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  {service.required_documents.map((documentName) => (
+                    <div key={documentName}>
+                      <Label htmlFor={`apply-doc-${documentName}`}>{documentName}</Label>
+                      <Input
+                        id={`apply-doc-${documentName}`}
+                        type="file"
+                        className="mt-1.5 rounded-xl"
+                        disabled={submitting}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setForm((prev) => ({
+                            ...prev,
+                            submittedDocuments: {
+                              ...prev.submittedDocuments,
+                              [documentName]: file?.name ?? "",
+                            },
+                          }));
+                        }}
+                      />
+                      {form.submittedDocuments[documentName] && (
+                        <div className="text-xs text-muted-foreground mt-1">{form.submittedDocuments[documentName]}</div>
+                      )}
+                    </div>
+                  ))}
+                  {service.fee_amount > 0 && (
+                    <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
+                      <div className="text-sm font-semibold">
+                        Dummy payment: ₹{service.fee_amount.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Provider: {service.payment_provider === "none" ? "Manual" : service.payment_provider}
+                      </div>
+                      <Button
+                        type="button"
+                        variant={form.paymentPaid ? "secondary" : "outline"}
+                        className="w-full"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            paymentPaid: true,
+                            paymentRef: prev.paymentRef || `DUMMY-${Date.now()}`,
+                          }))
+                        }
+                        disabled={submitting}
+                      >
+                        {form.paymentPaid ? "Payment completed" : "Pay now (Dummy)"}
+                      </Button>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full rounded-xl h-11 font-semibold">
                     {submitting ? `${t("apply_btn")}...` : t("apply_btn")}
                   </Button>
