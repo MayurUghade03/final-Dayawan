@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Sprout, Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLang } from "@/i18n/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -62,9 +63,7 @@ const RegisterPage = () => {
       <header className="border-b border-border bg-background/85 backdrop-blur-md">
         <div className="container-rural py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 min-h-0">
-            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-soft">
-              <Sprout className="h-5 w-5" />
-            </div>
+            <BrandLogo className="shadow-soft" />
             <div className="font-extrabold text-base sm:text-lg text-foreground">
               {t("brand")}
             </div>

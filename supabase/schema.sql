@@ -19,6 +19,18 @@ create table if not exists public.services (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.user_profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  full_name text not null default 'User',
+  phone text,
+  role text not null default 'citizen' check (role in ('admin', 'citizen')),
+  status text not null default 'active' check (status in ('active', 'suspended')),
+  suspended_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.service_applications (
   id uuid primary key default gen_random_uuid(),
   code text unique not null,
@@ -91,6 +103,51 @@ before update on public.services
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists trg_user_profiles_updated_at on public.user_profiles;
+create trigger trg_user_profiles_updated_at
+before update on public.user_profiles
+for each row
+execute function public.set_updated_at();
+
+create or replace function public.sync_user_profile_from_auth()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  app_role text;
+  user_role text;
+begin
+  app_role := lower(coalesce(new.raw_app_meta_data->>'role', ''));
+  user_role := lower(coalesce(new.raw_user_meta_data->>'role', ''));
+
+  insert into public.user_profiles (id, email, full_name, role, status)
+  values (
+    new.id,
+    lower(coalesce(new.email, '')),
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(coalesce(new.email, 'user@example.com'), '@', 1), 'User'),
+    case when app_role = 'admin' or user_role = 'admin' then 'admin' else 'citizen' end,
+    'active'
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    full_name = coalesce(nullif(excluded.full_name, ''), public.user_profiles.full_name),
+    role = case
+      when app_role = 'admin' or user_role = 'admin' then 'admin'
+      else public.user_profiles.role
+    end;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_auth_user_profiles on auth.users;
+create trigger trg_auth_user_profiles
+after insert or update on auth.users
+for each row
+execute function public.sync_user_profile_from_auth();
+
 create sequence if not exists public.service_application_code_seq start 1201;
 
 create or replace function public.generate_service_application_code()
@@ -111,8 +168,54 @@ before insert on public.service_applications
 for each row
 execute function public.generate_service_application_code();
 
+create or replace function public.current_user_role()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  jwt_role text;
+  profile_role text;
+begin
+  jwt_role := lower(coalesce(auth.jwt()->'app_metadata'->>'role', auth.jwt()->'user_metadata'->>'role', ''));
+  if jwt_role = 'admin' then
+    return 'admin';
+  end if;
+
+  select role
+    into profile_role
+  from public.user_profiles
+  where id = auth.uid()
+  limit 1;
+
+  if lower(coalesce(profile_role, '')) = 'admin' then
+    return 'admin';
+  end if;
+
+  return 'citizen';
+end;
+$$;
+
+create or replace function public.is_user_suspended()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.user_profiles up
+    where up.id = auth.uid()
+      and up.status = 'suspended'
+  );
+$$;
+
 alter table public.service_applications enable row level security;
 alter table public.services enable row level security;
+alter table public.user_profiles enable row level security;
 
 drop policy if exists "service_applications_select" on public.service_applications;
 create policy "service_applications_select"
@@ -122,8 +225,7 @@ to authenticated
 using (
   auth.uid() = user_id
   or lower(coalesce(user_email, '')) = lower(coalesce(auth.jwt()->>'email', ''))
-  or lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin'
-  or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin'
+  or public.current_user_role() = 'admin'
 );
 
 drop policy if exists "service_applications_insert" on public.service_applications;
@@ -134,6 +236,8 @@ to authenticated
 with check (
   auth.uid() = user_id
   and lower(coalesce(user_email, '')) = lower(coalesce(auth.jwt()->>'email', ''))
+  and public.current_user_role() <> 'admin'
+  and not public.is_user_suspended()
 );
 
 drop policy if exists "service_applications_update_admin" on public.service_applications;
@@ -142,12 +246,10 @@ on public.service_applications
 for update
 to authenticated
 using (
-  lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin'
-  or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin'
+  public.current_user_role() = 'admin'
 )
 with check (
-  lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin'
-  or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin'
+  public.current_user_role() = 'admin'
 );
 
 drop policy if exists "services_select" on public.services;
@@ -155,7 +257,7 @@ create policy "services_select"
 on public.services
 for select
 to anon, authenticated
-using (active = true or lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin' or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin');
+using (active = true or public.current_user_role() = 'admin');
 
 drop policy if exists "services_manage_admin" on public.services;
 create policy "services_manage_admin"
@@ -163,12 +265,90 @@ on public.services
 for all
 to authenticated
 using (
-  lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin'
-  or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin'
+  public.current_user_role() = 'admin'
 )
 with check (
-  lower(coalesce(auth.jwt()->'app_metadata'->>'role', '')) = 'admin'
-  or lower(coalesce(auth.jwt()->'user_metadata'->>'role', '')) = 'admin'
+  public.current_user_role() = 'admin'
+);
+
+drop policy if exists "user_profiles_select" on public.user_profiles;
+create policy "user_profiles_select"
+on public.user_profiles
+for select
+to authenticated
+using (
+  auth.uid() = id
+  or public.current_user_role() = 'admin'
+);
+
+drop policy if exists "user_profiles_update_admin" on public.user_profiles;
+create policy "user_profiles_update_admin"
+on public.user_profiles
+for update
+to authenticated
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
+
+drop policy if exists "user_profiles_insert_self" on public.user_profiles;
+create policy "user_profiles_insert_self"
+on public.user_profiles
+for insert
+to authenticated
+with check (auth.uid() = id);
+
+insert into public.user_profiles (id, email, full_name, role, status)
+select
+  u.id,
+  lower(coalesce(u.email, '')),
+  coalesce(u.raw_user_meta_data->>'full_name', split_part(coalesce(u.email, 'user@example.com'), '@', 1), 'User'),
+  case
+    when lower(coalesce(u.raw_app_meta_data->>'role', u.raw_user_meta_data->>'role', '')) = 'admin' then 'admin'
+    else 'citizen'
+  end,
+  'active'
+from auth.users u
+on conflict (id) do update set
+  email = excluded.email,
+  full_name = excluded.full_name;
+
+insert into storage.buckets (id, name, public)
+values ('application-documents', 'application-documents', false)
+on conflict (id) do update set public = excluded.public;
+
+drop policy if exists "application_documents_select" on storage.objects;
+create policy "application_documents_select"
+on storage.objects
+for select
+to authenticated
+using (
+  bucket_id = 'application-documents'
+  and (owner = auth.uid() or public.current_user_role() = 'admin')
+);
+
+drop policy if exists "application_documents_insert" on storage.objects;
+create policy "application_documents_insert"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'application-documents'
+  and owner = auth.uid()
+  and public.current_user_role() <> 'admin'
+  and not public.is_user_suspended()
+);
+
+drop policy if exists "application_documents_manage_admin" on storage.objects;
+create policy "application_documents_manage_admin"
+on storage.objects
+for all
+to authenticated
+using (
+  bucket_id = 'application-documents'
+  and public.current_user_role() = 'admin'
+)
+with check (
+  bucket_id = 'application-documents'
+  and public.current_user_role() = 'admin'
 );
 
 insert into public.services (id, category, title, description, details, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)

@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import type { ApplicationStatus, ApplyFormData, ServiceApplication } from "@/types";
+import type { ApplicationStatus, ApplyFormData, ServiceApplication, SubmittedDocument } from "@/types";
 import type { Database } from "@/types";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
@@ -71,7 +71,7 @@ const defaultDemoData: ServiceApplication[] = [
 const ApplicationContext = createContext<ApplicationCtx | null>(null);
 
 export function ApplicationProvider({ children }: { children: ReactNode }) {
-  const { user, status } = useAuth();
+  const { user, status, role, isSuspended } = useAuth();
   const [applications, setApplications] = useState<ServiceApplication[]>(() => loadApplications());
   const [loadingApplications, setLoadingApplications] = useState(false);
   const canUseSupabase = Boolean(isSupabaseConfigured && supabase);
@@ -105,6 +105,10 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   }, [refreshApplications]);
 
   const submitApplication = useCallback(async (data: ApplyFormData): Promise<ServiceApplication> => {
+    if (role === "admin" || isSuspended) {
+      throw new Error("APPLICATION_NOT_ALLOWED");
+    }
+
     const now = new Date().toISOString();
     const fallbackDraft: ServiceApplication = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -165,7 +169,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       return next;
     });
     return fallbackDraft;
-  }, [applications, canUseSupabase, status, user]);
+  }, [applications, canUseSupabase, status, user, role, isSuspended]);
 
   const updateApplicationStatus = useCallback(async (id: string, status: ApplicationStatus, adminNotes?: string) => {
     if (canUseSupabase && supabase) {
@@ -299,7 +303,7 @@ function normalizeRemoteApplication(row: Database["public"]["Tables"]["service_a
     status: row.status,
       admin_notes: row.admin_notes ?? undefined,
       submitted_payload: row.submitted_payload ?? undefined,
-      submitted_documents: row.submitted_documents ?? undefined,
+      submitted_documents: normalizeSubmittedDocuments(row.submitted_documents),
       payment_status: row.payment_status,
       payment_provider: row.payment_provider ?? "none",
       payment_reference: row.payment_reference ?? undefined,
@@ -316,12 +320,36 @@ function normalizeLocalApplication(app: ServiceApplication): ServiceApplication 
       app.submitted_payload && typeof app.submitted_payload === "object" && !Array.isArray(app.submitted_payload)
         ? app.submitted_payload
         : undefined,
-    submitted_documents: Array.isArray(app.submitted_documents) ? app.submitted_documents.filter((item) => typeof item === "string") : undefined,
+    submitted_documents: normalizeSubmittedDocuments(app.submitted_documents),
     payment_status: app.payment_status ?? "pending",
     payment_provider: app.payment_provider ?? "none",
     payment_reference: app.payment_reference || undefined,
     amount: Number.isFinite(app.amount) ? app.amount : 0,
   };
+}
+
+function normalizeSubmittedDocuments(value: unknown): SubmittedDocument[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const normalized = value
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === "string") return { name: item } as SubmittedDocument;
+      if (typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === "string" ? record.name : "";
+      if (!name.trim()) return null;
+      return {
+        name,
+        path: typeof record.path === "string" ? record.path : undefined,
+        url: typeof record.url === "string" ? record.url : undefined,
+        size: typeof record.size === "number" ? record.size : undefined,
+        uploaded_at: typeof record.uploaded_at === "string" ? record.uploaded_at : undefined,
+      } satisfies SubmittedDocument;
+    })
+    .filter((item): item is SubmittedDocument => Boolean(item));
+
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 export const STATUS_FLOW: ApplicationStatus[] = ["submitted", "received", "processing", "ready", "completed"];

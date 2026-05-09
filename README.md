@@ -51,8 +51,10 @@ This installs all required frontend packages.
 This SQL creates:
 - `services` table (admin-manageable service catalog + dynamic form schema)
 - `service_applications` table (status, submitted document metadata, payment metadata)
+- `user_profiles` table (editable user details, role assignment, suspension control)
+- Supabase Storage bucket `application-documents` for uploaded files
 - automatic tracking code generation (`DYW-1201`, `DYW-1202`, …)
-- security policies (users only see their own records, admins can update status)
+- security policies (role-aware access, admin restrictions, suspended-user blocking)
 - a bootstrap admin user:
   - email: `admin@dayawan.local`
   - password: `Admin@123` (change immediately in production)
@@ -101,6 +103,8 @@ Admin panel capabilities:
 - Configure payment readiness (`none` / `stripe` / `razorpay`) with dummy payment flow
 - Create/edit service-specific form fields used on “Apply” page
 - Update application lifecycle status
+- Manage users (edit details, role, suspension)
+- View uploaded application documents from admin queue
 
 For simple setup, keep admin emails in `.env` and use the bootstrap admin account.
 
