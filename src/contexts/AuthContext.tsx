@@ -158,10 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole(nextRole);
       setIsAdmin(nextRole === "admin");
       setIsSuspended(suspended);
-
-      if (suspended) {
-        await supabase.auth.signOut();
-      }
     };
 
     void loadUserProfile();
