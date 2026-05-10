@@ -20,6 +20,7 @@ export const t: Dict = {
   nav_faq: { mr: "प्रश्नोत्तरे", hi: "प्रश्नोत्तर", en: "FAQ" },
   nav_about: { mr: "आमच्याबद्दल", hi: "हमारे बारे में", en: "About" },
   nav_contact: { mr: "संपर्क", hi: "संपर्क", en: "Contact" },
+  quick_links: { mr: "द्रुत दुवे", hi: "त्वरित लिंक", en: "Quick Links" },
   nav_dashboard: { mr: "माझे अर्ज", hi: "मेरे आवेदन", en: "My applications" },
   nav_admin: { mr: "अॅडमिन", hi: "एडमिन", en: "Admin" },
 
