@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
   ReactNode,
@@ -43,10 +44,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole>("citizen");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isSuspended, setIsSuspended] = useState(false);
+  const activeSignInRequestRef = useRef<Promise<AuthError | null> | null>(null);
+  const authSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const lastSessionTokenRef = useRef<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+  const lastStatusRef = useRef<AuthStatus>("loading");
+  const renderCountRef = useRef(0);
+
+  const logDev = useCallback((message: string, meta?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return;
+    if (meta) {
+      console.debug(`[auth] ${message}`, meta);
+      return;
+    }
+    console.debug(`[auth] ${message}`);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    renderCountRef.current += 1;
+    if (renderCountRef.current > 1) {
+      console.debug("[auth] AuthProvider re-render", {
+        count: renderCountRef.current,
+        status,
+        userId: user?.id ?? null,
+      });
+    }
+  });
+
+  const applySessionState = useCallback(
+    (newSession: Session | null, source: string) => {
+      const nextToken = newSession?.access_token ?? null;
+      const nextUser = newSession?.user ?? null;
+      const nextUserId = nextUser?.id ?? null;
+      const nextStatus: AuthStatus = newSession ? "authenticated" : "unauthenticated";
+
+      const unchanged =
+        lastSessionTokenRef.current === nextToken && lastUserIdRef.current === nextUserId;
+      const canSkipStateWrite = unchanged && lastStatusRef.current === nextStatus && nextUserId !== null;
+      if (canSkipStateWrite) {
+        logDev("Skipping duplicate auth state update", { source, status: nextStatus, userId: nextUserId });
+        return;
+      }
+
+      lastSessionTokenRef.current = nextToken;
+      lastUserIdRef.current = nextUserId;
+      lastStatusRef.current = nextStatus;
+      setSession(newSession);
+      setUser(nextUser);
+      setIsAdmin(computeAdminFlag(nextUser));
+      setStatus(nextStatus);
+      if (!nextUser) {
+        setProfile(null);
+        setRole("citizen");
+        setIsSuspended(false);
+      }
+      logDev("Auth state updated", { source, status: nextStatus, userId: nextUserId });
+    },
+    [logDev],
+  );
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       // No backend — skip loading, stay unauthenticated.
+      lastSessionTokenRef.current = null;
+      lastUserIdRef.current = null;
+      lastStatusRef.current = "unauthenticated";
       setStatus("unauthenticated");
       setIsAdmin(false);
       setRole("citizen");
@@ -55,24 +118,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Hydrate from stored session.
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setIsAdmin(computeAdminFlag(data.session?.user ?? null));
-      setStatus(data.session ? "authenticated" : "unauthenticated");
-    });
+    let mounted = true;
 
-    // Listen for auth changes (login, logout, token refresh).
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      setIsAdmin(computeAdminFlag(newSession?.user ?? null));
-      setStatus(newSession ? "authenticated" : "unauthenticated");
-    });
+    const hydrateSession = async () => {
+      logDev("Fetching initial session via getSession");
+      const { data, error } = await supabase.auth.getSession();
+      if (!mounted) return;
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+      if (error) {
+        console.error("Failed to get auth session:", error);
+        applySessionState(null, "getSession:error");
+        return;
+      }
+
+      applySessionState(data.session, "getSession");
+    };
+
+    void hydrateSession();
+
+    authSubscriptionRef.current?.unsubscribe();
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === "TOKEN_REFRESHED") {
+        logDev("Session refresh event observed", { event });
+      } else {
+        logDev("Auth state change event observed", { event });
+      }
+      applySessionState(newSession, `onAuthStateChange:${event}`);
+    });
+    authSubscriptionRef.current = listener.subscription;
+
+    return () => {
+      mounted = false;
+      authSubscriptionRef.current?.unsubscribe();
+      authSubscriptionRef.current = null;
+    };
+  }, [applySessionState, logDev]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !user) {
@@ -170,10 +250,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthError | null> => {
       if (!isSupabaseConfigured || !supabase) return notConfiguredError();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return error;
+      if (activeSignInRequestRef.current) {
+        logDev("Rejected sign-in request because another attempt is in progress");
+        return authRequestInProgressError();
+      }
+
+      logDev("signInWithPassword request started");
+      const request = (async () => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        logDev("signInWithPassword request finished", {
+          status: error?.status ?? 200,
+          hasError: Boolean(error),
+        });
+        return error;
+      })();
+
+      activeSignInRequestRef.current = request;
+      try {
+        return await request;
+      } finally {
+        activeSignInRequestRef.current = null;
+      }
     },
-    [],
+    [logDev],
   );
 
   // ─── signUp ───────────────────────────────────────────────────────────────
@@ -236,6 +335,14 @@ function notConfiguredError(): AuthError {
     name: "AuthError",
     message: "AUTH_NOT_CONFIGURED",
     status: 503,
+  } as AuthError;
+}
+
+function authRequestInProgressError(): AuthError {
+  return {
+    name: "AuthError",
+    message: "AUTH_REQUEST_IN_PROGRESS",
+    status: 409,
   } as AuthError;
 }
 
