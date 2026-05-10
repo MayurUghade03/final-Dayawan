@@ -15,13 +15,18 @@ const schema = z.object({
   password: z.string().min(1),
 });
 
-const RATE_LIMIT_COOLDOWN_MS = Number(import.meta.env.VITE_AUTH_RATE_LIMIT_COOLDOWN_MS ?? 10_000);
 const RATE_LIMIT_MESSAGE = "Too many requests. Please wait a moment and try again.";
 const AUTH_IN_PROGRESS_MESSAGE = "Login request already in progress. Please wait.";
+const RATE_LIMIT_COOLDOWN_MS = getRateLimitCooldownMs();
 
 function isRateLimitError(error: { status?: number; message?: string }) {
-  if (error.status === 429) return true;
-  return typeof error.message === "string" && error.message.toLowerCase().includes("too many requests");
+  return error.status === 429;
+}
+
+function getRateLimitCooldownMs() {
+  const rawValue = import.meta.env.VITE_AUTH_RATE_LIMIT_COOLDOWN_MS;
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10_000;
 }
 
 const LoginPage = () => {
