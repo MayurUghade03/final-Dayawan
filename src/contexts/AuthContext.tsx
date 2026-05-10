@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isSuspended, setIsSuspended] = useState(false);
   const activeSignInRequestRef = useRef<Promise<AuthError | null> | null>(null);
+  const activeSignInCredentialsRef = useRef<{ email: string; password: string } | null>(null);
   const authSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const lastSessionTokenRef = useRef<string | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
@@ -81,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const unchanged =
         lastSessionTokenRef.current === nextToken && lastUserIdRef.current === nextUserId;
-      if (unchanged && lastStatusRef.current === nextStatus) {
+      const canSkipStateWrite = unchanged && lastStatusRef.current === nextStatus && nextUserId !== null;
+      if (canSkipStateWrite) {
         logDev("Skipping duplicate auth state update", { source, status: nextStatus, userId: nextUserId });
         return;
       }
@@ -93,6 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       setIsAdmin(computeAdminFlag(nextUser));
       setStatus(nextStatus);
+      if (!nextUser) {
+        setProfile(null);
+        setRole("citizen");
+        setIsSuspended(false);
+      }
       logDev("Auth state updated", { source, status: nextStatus, userId: nextUserId });
     },
     [logDev],
@@ -245,11 +252,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string): Promise<AuthError | null> => {
       if (!isSupabaseConfigured || !supabase) return notConfiguredError();
       if (activeSignInRequestRef.current) {
+        const inFlight = activeSignInCredentialsRef.current;
+        if (inFlight && (inFlight.email !== email || inFlight.password !== password)) {
+          logDev("Rejected new sign-in request because another credential attempt is in progress");
+          return authRequestInProgressError();
+        }
         logDev("Ignoring duplicate sign-in request while one is in progress");
         return activeSignInRequestRef.current;
       }
 
       logDev("signInWithPassword request started");
+      activeSignInCredentialsRef.current = { email, password };
       const request = (async () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         logDev("signInWithPassword request finished", {
@@ -264,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await request;
       } finally {
         activeSignInRequestRef.current = null;
+        activeSignInCredentialsRef.current = null;
       }
     },
     [logDev],
@@ -329,6 +343,14 @@ function notConfiguredError(): AuthError {
     name: "AuthError",
     message: "AUTH_NOT_CONFIGURED",
     status: 503,
+  } as AuthError;
+}
+
+function authRequestInProgressError(): AuthError {
+  return {
+    name: "AuthError",
+    message: "AUTH_REQUEST_IN_PROGRESS",
+    status: 409,
   } as AuthError;
 }
 

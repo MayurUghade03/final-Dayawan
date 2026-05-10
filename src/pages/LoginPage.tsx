@@ -15,8 +15,9 @@ const schema = z.object({
   password: z.string().min(1),
 });
 
-const RATE_LIMIT_COOLDOWN_MS = 10_000;
+const RATE_LIMIT_COOLDOWN_MS = Number(import.meta.env.VITE_AUTH_RATE_LIMIT_COOLDOWN_MS ?? 10_000);
 const RATE_LIMIT_MESSAGE = "Too many requests. Please wait a moment and try again.";
+const AUTH_IN_PROGRESS_MESSAGE = "Login request already in progress. Please wait.";
 
 function isRateLimitError(error: { status?: number; message?: string }) {
   if (error.status === 429) return true;
@@ -86,6 +87,10 @@ const LoginPage = () => {
       }
 
       if (error.message === "AUTH_NOT_CONFIGURED") return; // banner already shown
+      if (error.message === "AUTH_REQUEST_IN_PROGRESS") {
+        toast.error(AUTH_IN_PROGRESS_MESSAGE);
+        return;
+      }
 
       if (isRateLimitError(error)) {
         setRetryBlockedUntil(Date.now() + RATE_LIMIT_COOLDOWN_MS);
