@@ -48,6 +48,7 @@
     --ring: 217 89% 44%;
 
     --radius: 0.875rem;
+    --font-sans: 'Plus Jakarta Sans', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
 
     --shadow-soft: 0 1px 2px hsl(220 38% 12% / 0.04), 0 1px 3px hsl(220 38% 12% / 0.04);
     --shadow-card: 0 8px 24px -16px hsl(220 38% 12% / 0.24), 0 4px 10px -6px hsl(220 38% 12% / 0.10);
@@ -73,7 +74,7 @@
   }
 
   html {
-    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
     -webkit-text-size-adjust: 100%;
   }
 
@@ -139,4 +140,12 @@
   .hero-bg {
     background: var(--gradient-hero);
   }
+}
+
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition-property: background-color, color, border-color, fill, stroke, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease-in-out;
 }

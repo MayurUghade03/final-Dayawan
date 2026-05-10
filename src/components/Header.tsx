@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export function Header() {
   const { t } = useLang();
@@ -75,6 +76,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
+          <ThemeSwitcher />
 
           {/* ── Auth controls (desktop) ─────────────────────────────── */}
           {status !== "loading" && (

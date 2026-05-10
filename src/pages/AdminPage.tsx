@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { useTheme } from "@/contexts/ThemeContext";
+import { AppTheme, THEME_TOKEN_FIELDS } from "@/theme/themes";
 
 const STATUS_LABEL_KEYS: Record<ApplicationStatus, "status_submitted" | "status_received" | "status_processing" | "status_ready" | "status_completed"> = {
   submitted: "status_submitted",
@@ -28,6 +30,16 @@ const AdminPage = () => {
   const { status, isAdmin } = useAuth();
   const { applications, updateApplicationStatus } = useApplications();
   const { services, upsertService, createServiceDraft } = useServiceCatalog();
+  const {
+    themes,
+    globalDefaultThemeId,
+    createThemeDraft: createThemeDraftItem,
+    upsertTheme,
+    setThemeActive,
+    setGlobalDefaultTheme,
+    selectedThemeId,
+    setSelectedThemeId,
+  } = useTheme();
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [editingService, setEditingService] = useState<ManagedService | null>(null);
@@ -35,6 +47,9 @@ const AdminPage = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingUserId, setSavingUserId] = useState<string>("");
+  const [selectedThemeEditorId, setSelectedThemeEditorId] = useState<string>("");
+  const [editingTheme, setEditingTheme] = useState<AppTheme | null>(null);
+  const [savingTheme, setSavingTheme] = useState(false);
 
   useEffect(() => {
     if (!selectedServiceId && services.length > 0) setSelectedServiceId(services[0].id);
@@ -44,6 +59,20 @@ const AdminPage = () => {
     const selected = services.find((service) => service.id === selectedServiceId);
     if (selected) setEditingService({ ...selected, form_schema: [...selected.form_schema], required_documents: [...selected.required_documents] });
   }, [selectedServiceId, services]);
+
+  useEffect(() => {
+    if (!selectedThemeEditorId && themes.length > 0) setSelectedThemeEditorId(themes[0].id);
+  }, [selectedThemeEditorId, themes]);
+
+  useEffect(() => {
+    const selected = themes.find((theme) => theme.id === selectedThemeEditorId);
+    if (selected) {
+      setEditingTheme({
+        ...selected,
+        tokens: { ...selected.tokens },
+      });
+    }
+  }, [selectedThemeEditorId, themes]);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -67,6 +96,7 @@ const AdminPage = () => {
   }, [status, isAdmin]);
 
   const serviceOptions = useMemo(() => services.map((service) => ({ id: service.id, label: service.title })), [services]);
+  const themeOptions = useMemo(() => themes.map((theme) => ({ id: theme.id, label: theme.name })), [themes]);
 
   if (status === "unauthenticated") return <Navigate to="/login" replace state={{ from: "/admin" }} />;
   if (status === "loading") return null;
@@ -141,6 +171,20 @@ const AdminPage = () => {
     }
 
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const saveTheme = async () => {
+    if (!editingTheme) return;
+    setSavingTheme(true);
+    try {
+      await upsertTheme(editingTheme);
+      toast.success("Theme updated.");
+      setSelectedThemeEditorId(editingTheme.id);
+    } catch {
+      toast.error("Failed to save theme.");
+    } finally {
+      setSavingTheme(false);
+    }
   };
 
   return (
@@ -490,6 +534,174 @@ const AdminPage = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="font-bold text-xl">Theme Management</h2>
+              <div className="card-soft p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    Manage global themes and activate the default palette for all users.
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const draft = createThemeDraftItem();
+                      setEditingTheme(draft);
+                      setSelectedThemeEditorId(draft.id);
+                    }}
+                  >
+                    Create theme
+                  </Button>
+                </div>
+
+                <div>
+                  <Label htmlFor="theme-select">Select theme</Label>
+                  <select
+                    id="theme-select"
+                    value={selectedThemeEditorId}
+                    onChange={(e) => setSelectedThemeEditorId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
+                  >
+                    {themeOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                    {editingTheme && !themeOptions.some((item) => item.id === editingTheme.id) && (
+                      <option value={editingTheme.id}>{editingTheme.name || editingTheme.id}</option>
+                    )}
+                  </select>
+                </div>
+
+                {editingTheme && (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="theme-id">Theme ID</Label>
+                      <Input
+                        id="theme-id"
+                        value={editingTheme.id}
+                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, id: e.target.value } : prev)}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="theme-name">Theme name</Label>
+                      <Input
+                        id="theme-name"
+                        value={editingTheme.name}
+                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="theme-description">Description</Label>
+                      <Input
+                        id="theme-description"
+                        value={editingTheme.description || ""}
+                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, description: e.target.value } : prev)}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="theme-appearance">Appearance</Label>
+                      <select
+                        id="theme-appearance"
+                        value={editingTheme.appearance}
+                        onChange={(e) =>
+                          setEditingTheme((prev) =>
+                            prev ? { ...prev, appearance: e.target.value === "dark" ? "dark" : "light" } : prev,
+                          )
+                        }
+                        className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
+                      >
+                        <option value="light">Light appearance</option>
+                        <option value="dark">Dark appearance</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <label className="text-sm inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editingTheme.active}
+                          onChange={(e) =>
+                            setEditingTheme((prev) =>
+                              prev ? { ...prev, active: e.target.checked } : prev,
+                            )
+                          }
+                        />
+                        Active theme
+                      </label>
+                    </div>
+
+                    {THEME_TOKEN_FIELDS.map((field) => (
+                      <div key={field.key} className="md:col-span-1">
+                        <Label htmlFor={`token-${field.key}`}>{field.label}</Label>
+                        <Input
+                          id={`token-${field.key}`}
+                          value={editingTheme.tokens[field.key] ?? ""}
+                          onChange={(e) =>
+                            setEditingTheme((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    tokens: {
+                                      ...prev.tokens,
+                                      [field.key]: e.target.value,
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                          className="mt-1.5"
+                        />
+                      </div>
+                    ))}
+
+                    <div className="md:col-span-2 flex flex-wrap gap-2">
+                      <Button type="button" onClick={() => void saveTheme()} disabled={savingTheme}>
+                        {savingTheme ? "Saving..." : "Save theme"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await setThemeActive(editingTheme.id, !editingTheme.active);
+                            toast.success("Theme status updated.");
+                          } catch {
+                            toast.error("Failed to update theme status.");
+                          }
+                        }}
+                      >
+                        {editingTheme.active ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await setGlobalDefaultTheme(editingTheme.id);
+                            toast.success("Global default theme updated.");
+                          } catch {
+                            toast.error("Failed to update global theme.");
+                          }
+                        }}
+                        disabled={globalDefaultThemeId === editingTheme.id}
+                      >
+                        {globalDefaultThemeId === editingTheme.id ? "Global default theme" : "Set as global default"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setSelectedThemeId(editingTheme.id)}
+                        disabled={selectedThemeId === editingTheme.id}
+                      >
+                        {selectedThemeId === editingTheme.id ? "Preview active" : "Preview in this session"}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
