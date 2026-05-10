@@ -109,6 +109,7 @@ export interface ManagedService {
   category: ServiceCategory;
   title: string;
   description: string;
+  image_url?: string;
   details?: string;
   required_documents: string[];
   fee_amount: number;
@@ -210,6 +211,7 @@ export interface Database {
           category: ServiceCategory;
           title: string;
           description: string;
+          image_url: string | null;
           details: string | null;
           required_documents: string[];
           fee_amount: number;
@@ -225,6 +227,7 @@ export interface Database {
           category: ServiceCategory;
           title: string;
           description: string;
+          image_url?: string | null;
           details?: string | null;
           required_documents?: string[];
           fee_amount?: number;
@@ -239,6 +242,7 @@ export interface Database {
           category?: ServiceCategory;
           title?: string;
           description?: string;
+          image_url?: string | null;
           details?: string | null;
           required_documents?: string[];
           fee_amount?: number;
