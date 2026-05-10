@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +15,20 @@ const schema = z.object({
   password: z.string().min(1),
 });
 
+const RATE_LIMIT_MESSAGE = "Too many requests. Please wait a moment and try again.";
+const AUTH_IN_PROGRESS_MESSAGE = "Login request already in progress. Please wait.";
+const RATE_LIMIT_COOLDOWN_MS = getRateLimitCooldownMs();
+
+function isRateLimitError(error: { status?: number; message?: string }) {
+  return error.status === 429;
+}
+
+function getRateLimitCooldownMs() {
+  const rawValue = import.meta.env.VITE_AUTH_RATE_LIMIT_COOLDOWN_MS;
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10_000;
+}
+
 const LoginPage = () => {
   const { t } = useLang();
   const { signIn, isConfigured } = useAuth();
@@ -25,30 +39,83 @@ const LoginPage = () => {
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [retryBlockedUntil, setRetryBlockedUntil] = useState(0);
+  const renderCountRef = useRef(0);
+
+  const retryBlocked = retryBlockedUntil > Date.now();
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    renderCountRef.current += 1;
+    if (renderCountRef.current > 1) {
+      console.debug("[auth] LoginPage re-render", { count: renderCountRef.current });
+    }
+  });
+
+  useEffect(() => {
+    if (!retryBlockedUntil) return;
+    const delay = retryBlockedUntil - Date.now();
+    if (delay <= 0) {
+      setRetryBlockedUntil(0);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setRetryBlockedUntil(0), delay);
+    return () => window.clearTimeout(timeoutId);
+  }, [retryBlockedUntil]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) {
+      toast.error(AUTH_IN_PROGRESS_MESSAGE);
+      return;
+    }
+
+    if (retryBlocked) {
+      toast.error(RATE_LIMIT_MESSAGE);
+      return;
+    }
+
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       toast.error(t("form_error"));
       return;
     }
-    setLoading(true);
-    const error = await signIn(form.email, form.password);
-    setLoading(false);
 
-    if (!error) {
-      toast.success(t("login_success"));
-      navigate(from, { replace: true });
-      return;
+    if (import.meta.env.DEV) {
+      console.debug("[auth] Login submit started");
     }
 
-    if (error.message === "AUTH_NOT_CONFIGURED") return; // banner already shown
+    setLoading(true);
+    try {
+      const error = await signIn(form.email, form.password);
+      if (!error) {
+        toast.success(t("login_success"));
+        navigate(from, { replace: true });
+        return;
+      }
 
-    if (error.status === 400 || error.status === 401) {
-      toast.error(t("login_err_credentials"));
-    } else {
+      if (error.message === "AUTH_NOT_CONFIGURED") return; // banner already shown
+      if (error.message === "AUTH_REQUEST_IN_PROGRESS") {
+        toast.error(AUTH_IN_PROGRESS_MESSAGE);
+        return;
+      }
+
+      if (isRateLimitError(error)) {
+        setRetryBlockedUntil(Date.now() + RATE_LIMIT_COOLDOWN_MS);
+        toast.error(RATE_LIMIT_MESSAGE);
+        return;
+      }
+
+      if (error.status === 400 || error.status === 401) {
+        toast.error(t("login_err_credentials"));
+      } else {
+        toast.error(t("login_err_generic"));
+      }
+    } catch (error) {
+      console.error("Unexpected login failure:", error);
       toast.error(t("login_err_generic"));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -136,7 +203,7 @@ const LoginPage = () => {
 
             <Button
               type="submit"
-              disabled={loading || !isConfigured}
+              disabled={loading || !isConfigured || retryBlocked}
               className="w-full h-12 bg-primary hover:bg-primary-hover text-primary-foreground text-base font-semibold rounded-xl"
             >
               {loading ? (
