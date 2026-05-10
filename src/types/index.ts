@@ -7,6 +7,9 @@ export type PaymentProvider = "none" | "stripe" | "razorpay";
 export type FormFieldType = "text" | "number" | "date" | "textarea";
 export type UserRole = "admin" | "citizen";
 export type UserStatus = "active" | "suspended";
+export type ThemeMode = "light" | "dark" | "system";
+export type ThemeAppearance = "light" | "dark";
+export type ThemeTokenMap = Record<string, string>;
 
 export interface ServiceItem {
   id: string;
@@ -254,6 +257,8 @@ export interface Database {
           role: UserRole;
           status: UserStatus;
           suspended_at: string | null;
+          theme_mode: ThemeMode;
+          preferred_theme_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -265,6 +270,8 @@ export interface Database {
           role?: UserRole;
           status?: UserStatus;
           suspended_at?: string | null;
+          theme_mode?: ThemeMode;
+          preferred_theme_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -275,6 +282,57 @@ export interface Database {
           role?: UserRole;
           status?: UserStatus;
           suspended_at?: string | null;
+          theme_mode?: ThemeMode;
+          preferred_theme_id?: string | null;
+          updated_at?: string;
+        };
+      };
+      app_themes: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          appearance: ThemeAppearance;
+          tokens: ThemeTokenMap;
+          active: boolean;
+          built_in: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          description?: string | null;
+          appearance?: ThemeAppearance;
+          tokens?: ThemeTokenMap;
+          active?: boolean;
+          built_in?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          appearance?: ThemeAppearance;
+          tokens?: ThemeTokenMap;
+          active?: boolean;
+          built_in?: boolean;
+          updated_at?: string;
+        };
+      };
+      app_theme_settings: {
+        Row: {
+          id: number;
+          default_theme_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          default_theme_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          default_theme_id?: string;
           updated_at?: string;
         };
       };
