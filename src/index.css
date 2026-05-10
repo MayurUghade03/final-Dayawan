@@ -3,39 +3,38 @@
 @tailwind utilities;
 
 /* Dayawan Multiservices — Design System
-   Vibrant, energetic, trustworthy. Deep indigo primary + warm saffron accent on clean white.
+   Clean, modern and professional with calm blue accents.
    Typography: Plus Jakarta Sans (Latin) + Noto Sans Devanagari (Marathi/Hindi).
    All colors HSL.
-*/
+ */
 
 @layer base {
   :root {
     /* Surfaces */
     --background: 0 0% 100%;
-    --foreground: 222 47% 11%;          /* deep navy */
+    --foreground: 220 38% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 220 38% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 220 38% 12%;
 
-    /* Primary: vibrant indigo — modern, energetic, trustworthy */
-    --primary: 245 78% 54%;             /* #4f40ee */
+    /* Primary: modern blue */
+    --primary: 217 89% 44%;
     --primary-foreground: 0 0% 100%;
-    --primary-soft: 245 80% 96%;
-    --primary-hover: 245 78% 47%;
+    --primary-soft: 214 100% 96%;
+    --primary-hover: 217 89% 39%;
 
-    /* Secondary / Accent: warm saffron-orange for highlights & CTAs */
-    --secondary: 32 96% 52%;            /* #f97316 */
+    --secondary: 220 14% 20%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-soft: 32 96% 95%;
+    --secondary-soft: 220 16% 94%;
 
-    --muted: 240 10% 96%;
-    --muted-foreground: 240 6% 47%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 44%;
 
-    --accent: 245 80% 96%;
-    --accent-foreground: 245 78% 40%;
+    --accent: 214 100% 96%;
+    --accent-foreground: 217 89% 37%;
 
     --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
@@ -44,27 +43,27 @@
     --warning: 38 92% 50%;
     --info: 199 89% 48%;
 
-    --border: 240 8% 90%;
-    --input: 240 8% 90%;
-    --ring: 245 78% 54%;
+    --border: 220 13% 89%;
+    --input: 220 13% 89%;
+    --ring: 217 89% 44%;
 
     --radius: 0.875rem;
 
-    --shadow-soft: 0 1px 2px hsl(222 47% 11% / 0.04), 0 1px 3px hsl(222 47% 11% / 0.04);
-    --shadow-card: 0 4px 14px -6px hsl(222 47% 11% / 0.10), 0 2px 4px -2px hsl(222 47% 11% / 0.05);
-    --shadow-pop: 0 12px 32px -12px hsl(245 78% 54% / 0.28);
+    --shadow-soft: 0 1px 2px hsl(220 38% 12% / 0.04), 0 1px 3px hsl(220 38% 12% / 0.04);
+    --shadow-card: 0 8px 24px -16px hsl(220 38% 12% / 0.24), 0 4px 10px -6px hsl(220 38% 12% / 0.10);
+    --shadow-pop: 0 14px 32px -14px hsl(217 89% 44% / 0.32);
 
-    --gradient-hero: radial-gradient(1200px 500px at 90% -10%, hsl(245 78% 54% / 0.12), transparent 60%),
-                     radial-gradient(900px 400px at -10% 110%, hsl(32 96% 52% / 0.10), transparent 60%);
+    --gradient-hero: radial-gradient(1100px 520px at 90% -10%, hsl(217 89% 44% / 0.10), transparent 60%),
+                     radial-gradient(700px 340px at -10% 110%, hsl(220 16% 78% / 0.22), transparent 60%);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 245 78% 54%;
+    --sidebar-primary: 217 89% 44%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 245 80% 96%;
-    --sidebar-accent-foreground: 245 78% 40%;
-    --sidebar-border: 240 8% 90%;
-    --sidebar-ring: 245 78% 54%;
+    --sidebar-accent: 214 100% 96%;
+    --sidebar-accent-foreground: 217 89% 37%;
+    --sidebar-border: 220 13% 89%;
+    --sidebar-ring: 217 89% 44%;
   }
 }
 
@@ -119,7 +118,7 @@
   }
   .card-soft:hover {
     box-shadow: var(--shadow-card);
-    border-color: hsl(var(--primary) / 0.30);
+    border-color: hsl(var(--primary) / 0.25);
   }
   .chip {
     @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold;

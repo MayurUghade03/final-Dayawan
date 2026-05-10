@@ -29,8 +29,6 @@ export function Header() {
     { to: "/", label: t("nav_home") },
     { to: "/services", label: t("nav_services") },
     { to: "/track", label: t("nav_track") },
-    { to: "/faq", label: t("nav_faq") },
-    { to: "/about", label: t("nav_about") },
     { to: "/contact", label: t("nav_contact") },
   ];
 
@@ -65,7 +63,7 @@ export function Header() {
               end={l.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "px-3 py-2 rounded-lg transition-colors min-h-0",
+                  "px-3.5 py-2 rounded-full transition-colors min-h-0",
                   isActive ? "text-primary bg-primary-soft" : "text-foreground/80 hover:text-primary hover:bg-muted",
                 )
               }
