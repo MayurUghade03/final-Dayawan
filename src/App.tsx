@@ -8,6 +8,7 @@ import { LanguageProvider } from "@/i18n/LanguageContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ApplicationProvider } from "@/contexts/ApplicationContext";
 import { ServiceCatalogProvider } from "@/contexts/ServiceCatalogContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index.tsx";
 import ServicesPage from "./pages/ServicesPage.tsx";
 import ServiceDetailPage from "./pages/ServiceDetailPage.tsx";
@@ -35,31 +36,33 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
       <AuthProvider>
-        <ServiceCatalogProvider>
-          <ApplicationProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <ScrollToTop />
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/services/:id" element={<ServiceDetailPage />} />
-                  <Route path="/track" element={<TrackPage />} />
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/admin" element={<AdminPage />} />
-                  <Route path="/faq" element={<FAQPage />} />
-                  <Route path="/about" element={<AboutPage />} />
-                  <Route path="/contact" element={<ContactPage />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </BrowserRouter>
-            </TooltipProvider>
-          </ApplicationProvider>
-        </ServiceCatalogProvider>
+        <ThemeProvider>
+          <ServiceCatalogProvider>
+            <ApplicationProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <ScrollToTop />
+                  <Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/services" element={<ServicesPage />} />
+                    <Route path="/services/:id" element={<ServiceDetailPage />} />
+                    <Route path="/track" element={<TrackPage />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/admin" element={<AdminPage />} />
+                    <Route path="/faq" element={<FAQPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/contact" element={<ContactPage />} />
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </BrowserRouter>
+              </TooltipProvider>
+            </ApplicationProvider>
+          </ServiceCatalogProvider>
+        </ThemeProvider>
       </AuthProvider>
     </LanguageProvider>
   </QueryClientProvider>
