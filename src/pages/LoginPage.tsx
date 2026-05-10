@@ -18,6 +18,11 @@ const schema = z.object({
 const RATE_LIMIT_COOLDOWN_MS = 10_000;
 const RATE_LIMIT_MESSAGE = "Too many requests. Please wait a moment and try again.";
 
+function isRateLimitError(error: { status?: number; message?: string }) {
+  if (error.status === 429) return true;
+  return typeof error.message === "string" && error.message.toLowerCase().includes("too many requests");
+}
+
 const LoginPage = () => {
   const { t } = useLang();
   const { signIn, isConfigured } = useAuth();
@@ -202,8 +207,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-
-function isRateLimitError(error: { status?: number; message?: string }) {
-  if (error.status === 429) return true;
-  return typeof error.message === "string" && error.message.toLowerCase().includes("too many requests");
-}
