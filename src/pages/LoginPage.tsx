@@ -60,7 +60,10 @@ const LoginPage = () => {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading) {
+      toast.error(AUTH_IN_PROGRESS_MESSAGE);
+      return;
+    }
 
     if (retryBlocked) {
       toast.error(RATE_LIMIT_MESSAGE);
