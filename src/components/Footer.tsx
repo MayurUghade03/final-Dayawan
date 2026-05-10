@@ -20,7 +20,7 @@ export function Footer() {
         </div>
 
         <div>
-          <div className="text-sm font-semibold text-background mb-3">{t("nav_home")}</div>
+          <div className="text-sm font-semibold text-background mb-3">{t("quick_links")}</div>
           <ul className="space-y-2 text-sm text-background/70">
             <li><Link to="/services" className="hover:text-background min-h-0">{t("nav_services")}</Link></li>
             <li><Link to="/track" className="hover:text-background min-h-0">{t("nav_track")}</Link></li>
