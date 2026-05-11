@@ -93,7 +93,14 @@ const AdminPage = () => {
   );
   const predefinedThemes = useMemo(() => themes.filter((theme) => theme.built_in), [themes]);
   const documentRows = useMemo(
-    () => applications.flatMap((app) => (app.submitted_documents ?? []).map((doc, idx) => ({ app, doc, key: `${app.id}-${idx}` }))),
+    () =>
+      applications.flatMap((app) =>
+        (app.submitted_documents ?? []).map((doc, idx) => ({
+          app,
+          doc,
+          key: `${app.id}-${doc.path || doc.url || doc.name}-${idx}`,
+        })),
+      ),
     [applications],
   );
 
@@ -209,13 +216,17 @@ const AdminPage = () => {
         toast.error("Document link is not available.");
         return;
       }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Unable to download document.");
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = url;
+      anchor.href = objectUrl;
       anchor.download = sanitizeDocumentFilename(documentItem.name || "document");
-      anchor.rel = "noopener noreferrer";
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(objectUrl);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to download document.");
     } finally {

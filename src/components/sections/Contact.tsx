@@ -45,6 +45,7 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
   const telHref = `tel:${phone}`;
   const mapZoom = isContactPageVariant ? CONTACT_MAP_ZOOM : DEFAULT_MAP_ZOOM;
   const submitButtonLabel = isSubmitted ? "Submitted" : t("form_submit");
+  const formspreeEndpoint = getSafeFormspreeEndpoint(FORMSPREE_ENDPOINT);
 
   const mapsUrl = useMemo(
     () => `https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=${mapZoom}&output=embed`,
@@ -61,14 +62,14 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
       return;
     }
 
-    if (!FORMSPREE_ENDPOINT) {
+    if (!formspreeEndpoint) {
       toast.error("Contact form is not configured yet.");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(FORMSPREE_ENDPOINT, {
+      const response = await fetch(formspreeEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -84,7 +85,10 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null);
+        const payload = await response.json().catch((error: unknown) => {
+          console.error("Failed to parse Formspree error response:", error);
+          return null;
+        });
         const message = getFormspreeErrorMessage(payload) ?? "Unable to submit the form right now.";
         throw new Error(message);
       }
@@ -242,4 +246,14 @@ function getFormspreeErrorMessage(payload: unknown): string | null {
   const errors = (payload as { errors?: Array<{ message?: string }> }).errors;
   if (!Array.isArray(errors) || errors.length === 0) return null;
   return errors[0]?.message ?? null;
+}
+
+function getSafeFormspreeEndpoint(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }

@@ -47,7 +47,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("services")
       .select("*")
-      .order("active", { ascending: false })
+      .order("active", { ascending: false, nullsFirst: false })
       .order("id", { ascending: true });
 
     if (error) {
