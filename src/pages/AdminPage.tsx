@@ -209,7 +209,13 @@ const AdminPage = () => {
         toast.error("Document link is not available.");
         return;
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = documentItem.name || "document";
+      anchor.rel = "noopener noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to download document.");
     } finally {

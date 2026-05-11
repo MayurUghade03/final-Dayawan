@@ -17,6 +17,7 @@ type ContactProps = {
 
 const DEFAULT_PHONE = "+919999999999";
 const CONTACT_PAGE_PHONE = "7264953363";
+const CONTACT_PAGE_PHONE_E164 = "+917264953363";
 const CONTACT_PAGE_EMAIL = "mangeshnikas210@gmail.com";
 const BHALEGAON_LAT = 20.2206441;
 const BHALEGAON_LNG = 76.5570153;
@@ -37,8 +38,8 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const isContactPageVariant = variant === "contact-page";
-  const phone = isContactPageVariant ? CONTACT_PAGE_PHONE : DEFAULT_PHONE;
-  const displayPhone = isContactPageVariant ? `+91 ${CONTACT_PAGE_PHONE}` : DEFAULT_PHONE;
+  const phone = isContactPageVariant ? CONTACT_PAGE_PHONE_E164 : DEFAULT_PHONE;
+  const displayPhone = isContactPageVariant ? CONTACT_PAGE_PHONE : DEFAULT_PHONE;
   const telHref = `tel:${phone}`;
   const mapZoom = isContactPageVariant ? CONTACT_MAP_ZOOM : DEFAULT_MAP_ZOOM;
 
@@ -83,7 +84,10 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
         const payload = await response.json().catch(() => null);
         const message =
           payload && typeof payload === "object" && Array.isArray((payload as { errors?: Array<{ message?: string }> }).errors)
-            ? (payload as { errors: Array<{ message?: string }> }).errors[0]?.message
+            ? (() => {
+                const errors = (payload as { errors: Array<{ message?: string }> }).errors;
+                return errors.length > 0 ? errors[0]?.message : null;
+              })()
             : "Unable to submit the form right now.";
         throw new Error(message || "FORM_SUBMIT_FAILED");
       }
