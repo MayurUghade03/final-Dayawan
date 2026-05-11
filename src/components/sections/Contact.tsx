@@ -25,6 +25,7 @@ const DEFAULT_MAP_ZOOM = 16;
 const CONTACT_MAP_ZOOM = 17;
 const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
 const CONTACT_FORM_SOURCE = "dayawan-contact-page";
+const SUBMISSION_RESET_DELAY_MS = 2500;
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -85,13 +86,13 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         const message = getFormspreeErrorMessage(payload) ?? "Unable to submit the form right now.";
-        throw new Error(message || "FORM_SUBMIT_FAILED");
+        throw new Error(message);
       }
 
       setIsSubmitted(true);
       toast.success(t("form_success"));
       setForm({ name: "", phone: "", message: "" });
-      window.setTimeout(() => setIsSubmitted(false), 2500);
+      window.setTimeout(() => setIsSubmitted(false), SUBMISSION_RESET_DELAY_MS);
     } catch (error) {
       const fallbackMessage = error instanceof Error ? error.message : t("form_error");
       toast.error(fallbackMessage || t("form_error"));

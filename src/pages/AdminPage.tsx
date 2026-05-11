@@ -91,7 +91,7 @@ const AdminPage = () => {
     () => services.map((service) => ({ id: service.id, label: `${service.title}${service.active ? "" : " (inactive)"}` })),
     [services],
   );
-  const predefinedThemes = useMemo(() => themes.filter((theme) => theme.built_in).slice(0, 3), [themes]);
+  const predefinedThemes = useMemo(() => themes.filter((theme) => theme.built_in), [themes]);
   const documentRows = useMemo(
     () => applications.flatMap((app) => (app.submitted_documents ?? []).map((doc, idx) => ({ app, doc, key: `${app.id}-${idx}` }))),
     [applications],
@@ -833,6 +833,11 @@ function normalizeUserProfile(row: Database["public"]["Tables"]["user_profiles"]
 }
 
 function sanitizeDocumentFilename(name: string): string {
-  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
-  return sanitized || "document";
+  const trimmed = name.trim();
+  const extensionIndex = trimmed.lastIndexOf(".");
+  const hasExtension = extensionIndex > 0 && extensionIndex < trimmed.length - 1;
+  const baseName = hasExtension ? trimmed.slice(0, extensionIndex) : trimmed;
+  const extension = hasExtension ? trimmed.slice(extensionIndex).replace(/[^a-zA-Z0-9.]/g, "") : "";
+  const sanitizedBase = baseName.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  return `${sanitizedBase || "document"}${extension}`;
 }
