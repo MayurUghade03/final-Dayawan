@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useTheme } from "@/contexts/ThemeContext";
-import { AppTheme, THEME_TOKEN_FIELDS } from "@/theme/themes";
+import { Download, Eye } from "lucide-react";
 
 const STATUS_LABEL_KEYS: Record<ApplicationStatus, "status_submitted" | "status_received" | "status_processing" | "status_ready" | "status_completed"> = {
   submitted: "status_submitted",
@@ -25,17 +25,24 @@ const STATUS_LABEL_KEYS: Record<ApplicationStatus, "status_submitted" | "status_
   completed: "status_completed",
 };
 
+const ADMIN_SECTIONS = [
+  { id: "overview", label: "Dashboard Overview" },
+  { id: "services", label: "Service Management" },
+  { id: "users", label: "User Management" },
+  { id: "documents", label: "Document Management" },
+  { id: "applications", label: "Application Queue" },
+  { id: "contacts", label: "Contact Requests" },
+  { id: "settings", label: "Settings" },
+] as const;
+
 const AdminPage = () => {
   const { t } = useLang();
   const { status, isAdmin } = useAuth();
   const { applications, updateApplicationStatus } = useApplications();
-  const { services, upsertService, createServiceDraft } = useServiceCatalog();
+  const { services, upsertService, removeService, createServiceDraft } = useServiceCatalog();
   const {
     themes,
     globalDefaultThemeId,
-    createThemeDraft: createThemeDraftItem,
-    upsertTheme,
-    setThemeActive,
     setGlobalDefaultTheme,
     selectedThemeId,
     setSelectedThemeId,
@@ -44,12 +51,11 @@ const AdminPage = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [editingService, setEditingService] = useState<ManagedService | null>(null);
   const [savingService, setSavingService] = useState(false);
+  const [pendingDeleteServiceId, setPendingDeleteServiceId] = useState<string | null>(null);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingUserId, setSavingUserId] = useState<string>("");
-  const [selectedThemeEditorId, setSelectedThemeEditorId] = useState<string>("");
-  const [editingTheme, setEditingTheme] = useState<AppTheme | null>(null);
-  const [savingTheme, setSavingTheme] = useState(false);
+  const [loadingDocumentKey, setLoadingDocumentKey] = useState<string>("");
 
   useEffect(() => {
     if (!selectedServiceId && services.length > 0) setSelectedServiceId(services[0].id);
@@ -59,20 +65,6 @@ const AdminPage = () => {
     const selected = services.find((service) => service.id === selectedServiceId);
     if (selected) setEditingService({ ...selected, form_schema: [...selected.form_schema], required_documents: [...selected.required_documents] });
   }, [selectedServiceId, services]);
-
-  useEffect(() => {
-    if (!selectedThemeEditorId && themes.length > 0) setSelectedThemeEditorId(themes[0].id);
-  }, [selectedThemeEditorId, themes]);
-
-  useEffect(() => {
-    const selected = themes.find((theme) => theme.id === selectedThemeEditorId);
-    if (selected) {
-      setEditingTheme({
-        ...selected,
-        tokens: { ...selected.tokens },
-      });
-    }
-  }, [selectedThemeEditorId, themes]);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -95,8 +87,22 @@ const AdminPage = () => {
     void loadUsers();
   }, [status, isAdmin]);
 
-  const serviceOptions = useMemo(() => services.map((service) => ({ id: service.id, label: service.title })), [services]);
-  const themeOptions = useMemo(() => themes.map((theme) => ({ id: theme.id, label: theme.name })), [themes]);
+  const serviceOptions = useMemo(
+    () => services.map((service) => ({ id: service.id, label: `${service.title}${service.active ? "" : " (inactive)"}` })),
+    [services],
+  );
+  const predefinedThemes = useMemo(() => themes.filter((theme) => theme.built_in), [themes]);
+  const documentRows = useMemo(
+    () =>
+      applications.flatMap((app) =>
+        (app.submitted_documents ?? []).map((doc, idx) => ({
+          app,
+          doc,
+          key: `${app.id}-${doc.path || doc.url || doc.name}-${idx}`,
+        })),
+      ),
+    [applications],
+  );
 
   if (status === "unauthenticated") return <Navigate to="/login" replace state={{ from: "/admin" }} />;
   if (status === "loading") return null;
@@ -154,36 +160,77 @@ const AdminPage = () => {
     setSavingUserId("");
   };
 
-  const openDocument = async (documentItem: SubmittedDocument) => {
-    if (documentItem.url) {
-      window.open(documentItem.url, "_blank", "noopener,noreferrer");
-      return;
+  const deleteService = async () => {
+    if (!editingService) return;
+
+    try {
+      await removeService(editingService.id);
+      toast.success("Service deleted.");
+      const remaining = services.filter((item) => item.id !== editingService.id);
+      setSelectedServiceId(remaining[0]?.id ?? "");
+      setEditingService(remaining[0] ?? null);
+      setPendingDeleteServiceId(null);
+    } catch {
+      toast.error("Failed to delete service.");
     }
-    if (!documentItem.path || !supabase) return;
+  };
+
+  const getDocumentUrl = async (documentItem: SubmittedDocument) => {
+    if (documentItem.url) {
+      return documentItem.url;
+    }
+    if (!documentItem.path || !supabase) return null;
 
     const { data, error } = await supabase.storage
       .from("application-documents")
       .createSignedUrl(documentItem.path, 300);
 
     if (error || !data?.signedUrl) {
-      toast.error("Unable to open document.");
-      return;
+      throw new Error("Unable to open document.");
     }
 
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    return data.signedUrl;
   };
 
-  const saveTheme = async () => {
-    if (!editingTheme) return;
-    setSavingTheme(true);
+  const previewDocument = async (key: string, documentItem: SubmittedDocument) => {
+    setLoadingDocumentKey(key);
     try {
-      await upsertTheme(editingTheme);
-      toast.success("Theme updated.");
-      setSelectedThemeEditorId(editingTheme.id);
-    } catch {
-      toast.error("Failed to save theme.");
+      const url = await getDocumentUrl(documentItem);
+      if (!url) {
+        toast.error("Document link is not available.");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to open document.");
     } finally {
-      setSavingTheme(false);
+      setLoadingDocumentKey("");
+    }
+  };
+
+  const downloadDocument = async (key: string, documentItem: SubmittedDocument) => {
+    setLoadingDocumentKey(key);
+    try {
+      const url = await getDocumentUrl(documentItem);
+      if (!url) {
+        toast.error("Document link is not available.");
+        return;
+      }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Unable to download document.");
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = sanitizeDocumentFilename(documentItem.name || "document");
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to download document.");
+    } finally {
+      setLoadingDocumentKey("");
     }
   };
 
@@ -200,8 +247,33 @@ const AdminPage = () => {
         </section>
 
         <section className="section-pad">
-          <div className="container-rural space-y-6">
-            <div className="card-soft p-5 space-y-4">
+          <div className="container-rural grid xl:grid-cols-[250px_minmax(0,1fr)] gap-6">
+            <aside className="card-soft p-4 h-fit xl:sticky xl:top-24">
+              <nav className="space-y-1">
+                {ADMIN_SECTIONS.map((section) => (
+                  <a
+                    key={section.id}
+                    href={`#${section.id}`}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-foreground/85 hover:bg-muted"
+                  >
+                    {section.label}
+                  </a>
+                ))}
+              </nav>
+            </aside>
+
+            <div className="space-y-6">
+            <div id="overview" className="card-soft p-5">
+              <h2 className="font-bold text-xl">Dashboard Overview</h2>
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+                <StatCard label="Total services" value={String(services.length)} />
+                <StatCard label="Active services" value={String(services.filter((item) => item.active).length)} />
+                <StatCard label="Total users" value={String(users.length)} />
+                <StatCard label="Applications" value={String(applications.length)} />
+              </div>
+            </div>
+
+            <div id="services" className="card-soft p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h2 className="font-bold text-xl">Service Management</h2>
                 <Button
@@ -274,6 +346,16 @@ const AdminPage = () => {
                       value={editingService.description}
                       onChange={(e) => setEditingService((prev) => prev ? { ...prev, description: e.target.value } : prev)}
                       className="mt-1.5"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="service-image-url">Image URL</Label>
+                    <Input
+                      id="service-image-url"
+                      value={editingService.image_url || ""}
+                      onChange={(e) => setEditingService((prev) => prev ? { ...prev, image_url: e.target.value } : prev)}
+                      className="mt-1.5"
+                      placeholder="https://..."
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -445,15 +527,54 @@ const AdminPage = () => {
                   </div>
 
                   <div className="md:col-span-2">
-                    <Button onClick={saveService} disabled={savingService}>
-                      {savingService ? "Saving..." : "Save service"}
-                    </Button>
+                    <label className="text-sm inline-flex items-center gap-2 mb-3">
+                      <input
+                        type="checkbox"
+                        checked={editingService.active}
+                        onChange={(e) => setEditingService((prev) => prev ? { ...prev, active: e.target.checked } : prev)}
+                      />
+                      Service is active (visible to citizens)
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={saveService} disabled={savingService}>
+                        {savingService ? "Saving..." : "Save service"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        aria-label={`Delete service ${editingService.title || editingService.id}`}
+                        onClick={() => setPendingDeleteServiceId(editingService.id)}
+                      >
+                        Delete service
+                      </Button>
+                    </div>
+                    {pendingDeleteServiceId === editingService.id && (
+                      <div
+                        className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+                        role="alertdialog"
+                        aria-live="polite"
+                        aria-label={`Confirm delete ${editingService.title || editingService.id}`}
+                      >
+                        <div className="text-sm font-medium">Delete this service permanently?</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          This removes the service configuration without changing existing users, applications, or uploaded files.
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" variant="destructive" onClick={() => void deleteService()}>
+                            Confirm delete
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => setPendingDeleteServiceId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="space-y-4">
+            <div id="users" className="space-y-4">
               <h2 className="font-bold text-xl">User Management</h2>
               <div className="card-soft p-5 space-y-4">
                 {!isSupabaseConfigured ? (
@@ -539,175 +660,94 @@ const AdminPage = () => {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h2 className="font-bold text-xl">Theme Management</h2>
+            <div id="settings" className="space-y-4">
+              <h2 className="font-bold text-xl">Settings</h2>
               <div className="card-soft p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="text-sm text-muted-foreground">
-                    Manage global themes and activate the default palette for all users.
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const draft = createThemeDraftItem();
-                      setEditingTheme(draft);
-                      setSelectedThemeEditorId(draft.id);
-                    }}
-                  >
-                    Create theme
-                  </Button>
+                <div className="text-sm text-muted-foreground">
+                  Theme options are limited to predefined themes only.
                 </div>
-
-                <div>
-                  <Label htmlFor="theme-select">Select theme</Label>
-                  <select
-                    id="theme-select"
-                    value={selectedThemeEditorId}
-                    onChange={(e) => setSelectedThemeEditorId(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
-                  >
-                    {themeOptions.map((option) => (
-                      <option key={option.id} value={option.id}>{option.label}</option>
-                    ))}
-                    {editingTheme && !themeOptions.some((item) => item.id === editingTheme.id) && (
-                      <option value={editingTheme.id}>{editingTheme.name || editingTheme.id}</option>
-                    )}
-                  </select>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {predefinedThemes.map((theme) => (
+                    <div key={theme.id} className="rounded-xl border border-border p-3 space-y-2">
+                      <div className="font-semibold">{theme.name}</div>
+                      {theme.description && <div className="text-xs text-muted-foreground">{theme.description}</div>}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedThemeId(theme.id)}
+                          disabled={selectedThemeId === theme.id}
+                        >
+                          {selectedThemeId === theme.id ? "Preview active" : "Preview"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await setGlobalDefaultTheme(theme.id);
+                              toast.success("Global default theme updated.");
+                            } catch {
+                              toast.error("Failed to update global theme.");
+                            }
+                          }}
+                          disabled={globalDefaultThemeId === theme.id}
+                        >
+                          {globalDefaultThemeId === theme.id ? "Global default" : "Set default"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              </div>
+            </div>
 
-                {editingTheme && (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="theme-id">Theme ID</Label>
-                      <Input
-                        id="theme-id"
-                        value={editingTheme.id}
-                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, id: e.target.value } : prev)}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="theme-name">Theme name</Label>
-                      <Input
-                        id="theme-name"
-                        value={editingTheme.name}
-                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, name: e.target.value } : prev)}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="theme-description">Description</Label>
-                      <Input
-                        id="theme-description"
-                        value={editingTheme.description || ""}
-                        onChange={(e) => setEditingTheme((prev) => prev ? { ...prev, description: e.target.value } : prev)}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="theme-appearance">Appearance</Label>
-                      <select
-                        id="theme-appearance"
-                        value={editingTheme.appearance}
-                        onChange={(e) =>
-                          setEditingTheme((prev) =>
-                            prev ? { ...prev, appearance: e.target.value === "dark" ? "dark" : "light" } : prev,
-                          )
-                        }
-                        className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5"
-                      >
-                        <option value="light">Light appearance</option>
-                        <option value="dark">Dark appearance</option>
-                      </select>
-                    </div>
-                    <div className="flex items-end">
-                      <label className="text-sm inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={editingTheme.active}
-                          onChange={(e) =>
-                            setEditingTheme((prev) =>
-                              prev ? { ...prev, active: e.target.checked } : prev,
-                            )
-                          }
-                        />
-                        Active theme
-                      </label>
-                    </div>
-
-                    {THEME_TOKEN_FIELDS.map((field) => (
-                      <div key={field.key} className="md:col-span-1">
-                        <Label htmlFor={`token-${field.key}`}>{field.label}</Label>
-                        <Input
-                          id={`token-${field.key}`}
-                          value={editingTheme.tokens[field.key] ?? ""}
-                          onChange={(e) =>
-                            setEditingTheme((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    tokens: {
-                                      ...prev.tokens,
-                                      [field.key]: e.target.value,
-                                    },
-                                  }
-                                : prev,
-                            )
-                          }
-                          className="mt-1.5"
-                        />
+            <div id="documents" className="space-y-4">
+              <h2 className="font-bold text-xl">Document Management</h2>
+              <div className="card-soft p-5 space-y-3">
+                {documentRows.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No uploaded documents available yet.</div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {documentRows.map(({ key, app, doc }) => (
+                      <div key={key} className="rounded-xl border border-border p-4 space-y-2">
+                        <div className="font-semibold text-sm">{doc.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Application: {app.code} • {app.user_name} {app.user_email ? `• ${app.user_email}` : ""}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Service: {app.service_name} {doc.size ? `• ${(doc.size / 1024).toFixed(1)} KB` : ""}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void previewDocument(key, doc)}
+                            disabled={loadingDocumentKey === key}
+                          >
+                            <Eye className="h-4 w-4 mr-1" /> Preview
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void downloadDocument(key, doc)}
+                            disabled={loadingDocumentKey === key}
+                          >
+                            <Download className="h-4 w-4 mr-1" /> Download
+                          </Button>
+                        </div>
                       </div>
                     ))}
-
-                    <div className="md:col-span-2 flex flex-wrap gap-2">
-                      <Button type="button" onClick={() => void saveTheme()} disabled={savingTheme}>
-                        {savingTheme ? "Saving..." : "Save theme"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            await setThemeActive(editingTheme.id, !editingTheme.active);
-                            toast.success("Theme status updated.");
-                          } catch {
-                            toast.error("Failed to update theme status.");
-                          }
-                        }}
-                      >
-                        {editingTheme.active ? "Deactivate" : "Activate"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            await setGlobalDefaultTheme(editingTheme.id);
-                            toast.success("Global default theme updated.");
-                          } catch {
-                            toast.error("Failed to update global theme.");
-                          }
-                        }}
-                        disabled={globalDefaultThemeId === editingTheme.id}
-                      >
-                        {globalDefaultThemeId === editingTheme.id ? "Global default theme" : "Set as global default"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setSelectedThemeId(editingTheme.id)}
-                        disabled={selectedThemeId === editingTheme.id}
-                      >
-                        {selectedThemeId === editingTheme.id ? "Preview active" : "Preview in this session"}
-                      </Button>
-                    </div>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div id="applications" className="space-y-4">
               <h2 className="font-bold text-xl">Application Queue</h2>
               {applications.map((app) => (
                 <div key={app.id} className="card-soft p-5">
@@ -756,28 +796,8 @@ const AdminPage = () => {
                       </select>
                     </div>
                   </div>
-                  {(app.submitted_documents?.length || app.submitted_payload) && (
+                  {app.submitted_payload && (
                     <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground space-y-1">
-                      {app.submitted_documents && app.submitted_documents.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="font-semibold text-foreground/80">Documents</div>
-                          {app.submitted_documents.map((documentItem, index) => (
-                            <div key={documentItem.path || documentItem.url || `${documentItem.name}-${index}`}>
-                              {documentItem.path || documentItem.url ? (
-                                <button
-                                  type="button"
-                                  className="text-primary hover:underline min-h-0"
-                                  onClick={() => void openDocument(documentItem)}
-                                >
-                                  {documentItem.name}
-                                </button>
-                              ) : (
-                                <span>{documentItem.name}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                       {app.submitted_payload && Object.entries(app.submitted_payload).map(([key, value]) => (
                         <div key={key}>{key}: {value}</div>
                       ))}
@@ -785,6 +805,19 @@ const AdminPage = () => {
                   )}
                 </div>
               ))}
+            </div>
+
+            <div id="contacts" className="space-y-4">
+              <h2 className="font-bold text-xl">Contact Requests</h2>
+              <div className="card-soft p-5 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Contact submissions are sent to Formspree. Review requests in your Formspree dashboard and inbox.
+                </p>
+                <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
+                  Ensure <code>VITE_FORMSPREE_ENDPOINT</code> is configured in production.
+                </div>
+              </div>
+            </div>
             </div>
           </div>
         </section>
@@ -808,4 +841,14 @@ function normalizeUserProfile(row: Database["public"]["Tables"]["user_profiles"]
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function sanitizeDocumentFilename(name: string): string {
+  const trimmed = name.trim();
+  const extensionIndex = trimmed.lastIndexOf(".");
+  const hasExtension = extensionIndex > 0 && extensionIndex < trimmed.length - 1;
+  const baseName = hasExtension ? trimmed.slice(0, extensionIndex) : trimmed;
+  const extension = hasExtension ? trimmed.slice(extensionIndex).replace(/[^a-zA-Z0-9.]/g, "") : "";
+  const sanitizedBase = baseName.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  return `${sanitizedBase || "document"}${extension}`;
 }

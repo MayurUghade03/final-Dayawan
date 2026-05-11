@@ -2,12 +2,14 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { SERVICES } from "@/i18n/translations";
 import type { Database, ManagedService, ServiceCategory, ServiceFormField } from "@/types";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ServiceCatalogCtx = {
   services: ManagedService[];
   loadingServices: boolean;
   getServiceById: (id: string) => ManagedService | undefined;
   upsertService: (service: ManagedService) => Promise<void>;
+  removeService: (id: string) => Promise<void>;
   createServiceDraft: () => ManagedService;
 };
 
@@ -19,6 +21,7 @@ const defaultServices: ManagedService[] = SERVICES.map((service) => ({
   category: service.category,
   title: service.title.en,
   description: service.desc.en,
+  image_url: "",
   details: service.long?.en ?? service.desc.en,
   required_documents: service.docs.map((doc) => doc.en),
   fee_amount: parseFeeAmount(service.fee?.en),
@@ -29,6 +32,7 @@ const defaultServices: ManagedService[] = SERVICES.map((service) => ({
 }));
 
 export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth();
   const [services, setServices] = useState<ManagedService[]>(() => loadServices());
   const [loadingServices, setLoadingServices] = useState(false);
   const canUseSupabase = Boolean(isSupabaseConfigured && supabase);
@@ -43,7 +47,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("services")
       .select("*")
-      .eq("active", true)
+      .order("active", { ascending: false, nullsFirst: false })
       .order("id", { ascending: true });
 
     if (error) {
@@ -53,7 +57,9 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const normalized = (data ?? []).map(normalizeRemoteService);
+    const normalized = (data ?? [])
+      .map(normalizeRemoteService)
+      .filter((service) => isAdmin || service.active);
     if (normalized.length > 0) {
       setServices(normalized);
       saveServices(normalized);
@@ -62,7 +68,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
       setServices(fallback);
     }
     setLoadingServices(false);
-  }, [canUseSupabase]);
+  }, [canUseSupabase, isAdmin]);
 
   useEffect(() => {
     void refreshServices();
@@ -77,6 +83,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
         category: normalized.category,
         title: normalized.title,
         description: normalized.description,
+        image_url: normalized.image_url ?? null,
         details: normalized.details ?? null,
         required_documents: normalized.required_documents,
         fee_amount: normalized.fee_amount,
@@ -100,6 +107,22 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     });
   }, [canUseSupabase]);
 
+  const removeService = useCallback(async (id: string) => {
+    if (canUseSupabase && supabase) {
+      const { error } = await supabase.from("services").delete().eq("id", id);
+      if (error) {
+        console.error("Failed to delete service:", error);
+        throw new Error("SERVICE_DELETE_FAILED");
+      }
+    }
+
+    setServices((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      saveServices(next);
+      return next;
+    });
+  }, [canUseSupabase]);
+
   const getServiceById = useCallback((id: string) => services.find((service) => service.id === id), [services]);
 
   const createServiceDraft = useCallback((): ManagedService => ({
@@ -107,6 +130,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     category: "gov",
     title: "",
     description: "",
+    image_url: "",
     details: "",
     required_documents: [],
     fee_amount: 0,
@@ -117,8 +141,8 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
   }), []);
 
   const value = useMemo<ServiceCatalogCtx>(
-    () => ({ services, loadingServices, getServiceById, upsertService, createServiceDraft }),
-    [services, loadingServices, getServiceById, upsertService, createServiceDraft],
+    () => ({ services, loadingServices, getServiceById, upsertService, removeService, createServiceDraft }),
+    [services, loadingServices, getServiceById, upsertService, removeService, createServiceDraft],
   );
 
   return <ServiceCatalogContext.Provider value={value}>{children}</ServiceCatalogContext.Provider>;
@@ -163,6 +187,7 @@ function normalizeManagedService(service: ManagedService): ManagedService {
     category: normalizeCategory(service.category),
     title: service.title.trim() || "Untitled Service",
     description: service.description.trim() || "Service details will be updated soon.",
+    image_url: service.image_url?.trim() || "",
     details: service.details?.trim() || service.description.trim() || "Service details will be updated soon.",
     required_documents: service.required_documents.map((item) => item.trim()).filter(Boolean),
     fee_amount: Number.isFinite(service.fee_amount) ? Math.max(0, service.fee_amount) : 0,
@@ -207,6 +232,7 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
     category: row.category,
     title: row.title,
     description: row.description,
+    image_url: row.image_url ?? undefined,
     details: row.details ?? undefined,
     required_documents: safeDocuments,
     fee_amount: Number(row.fee_amount ?? 0),

@@ -3,14 +3,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Phone, MapPin, Clock, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { Phone, MapPin, Clock, Loader2, Mail, ExternalLink } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-const PHONE = "+919999999999";
+type ContactVariant = "default" | "contact-page";
+
+type ContactProps = {
+  withHeading?: boolean;
+  variant?: ContactVariant;
+};
+
+const DEFAULT_PHONE = "+919999999999";
+const CONTACT_PAGE_PHONE = "7264953363";
+const CONTACT_PAGE_PHONE_E164 = "+917264953363";
+const CONTACT_PAGE_EMAIL = "mangeshnikas210@gmail.com";
 const BHALEGAON_LAT = 20.2206441;
 const BHALEGAON_LNG = 76.5570153;
+const DEFAULT_MAP_ZOOM = 16;
+const CONTACT_MAP_ZOOM = 17;
+const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+const CONTACT_FORM_SOURCE = "dayawan-contact-page";
+const SUBMISSION_RESET_DELAY_MS = 2500;
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -18,23 +33,76 @@ const schema = z.object({
   message: z.string().trim().min(3).max(1000),
 });
 
-export function Contact({ withHeading = true }: { withHeading?: boolean }) {
+export function Contact({ withHeading = true, variant = "default" }: ContactProps) {
   const { t } = useLang();
   const [form, setForm] = useState({ name: "", phone: "", message: "" });
   const [loading, setLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const isContactPageVariant = variant === "contact-page";
+  const phone = isContactPageVariant ? CONTACT_PAGE_PHONE_E164 : DEFAULT_PHONE;
+  const displayPhone = isContactPageVariant ? CONTACT_PAGE_PHONE : DEFAULT_PHONE;
+  const telHref = `tel:${phone}`;
+  const mapZoom = isContactPageVariant ? CONTACT_MAP_ZOOM : DEFAULT_MAP_ZOOM;
+  const submitButtonLabel = isSubmitted ? "Submitted" : t("form_submit");
+  const formspreeEndpoint = getSafeFormspreeEndpoint(FORMSPREE_ENDPOINT);
+
+  const mapsUrl = useMemo(
+    () => `https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=${mapZoom}&output=embed`,
+    [mapZoom],
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || isSubmitted) return;
+
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       toast.error(t("form_error"));
       return;
     }
+
+    if (!formspreeEndpoint) {
+      toast.error("Contact form is not configured yet.");
+      return;
+    }
+
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    toast.success(t("form_success"));
-    setForm({ name: "", phone: "", message: "" });
-    setLoading(false);
+    try {
+      const response = await fetch(formspreeEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          name: parsed.data.name,
+          phone: parsed.data.phone,
+          message: parsed.data.message,
+          source: CONTACT_FORM_SOURCE,
+          page: typeof window !== "undefined" ? window.location.href : "contact",
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch((error: unknown) => {
+          console.error("Failed to parse Formspree error response:", error);
+          return null;
+        });
+        const message = getFormspreeErrorMessage(payload) ?? "Unable to submit the form right now.";
+        throw new Error(message);
+      }
+
+      setIsSubmitted(true);
+      toast.success(t("form_success"));
+      setForm({ name: "", phone: "", message: "" });
+      window.setTimeout(() => setIsSubmitted(false), SUBMISSION_RESET_DELAY_MS);
+    } catch (error) {
+      const fallbackMessage = error instanceof Error ? error.message : t("form_error");
+      toast.error(fallbackMessage || t("form_error"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,15 +118,27 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
 
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
           <div className="space-y-5">
-            <a href={`tel:${PHONE}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
+            <a href={telHref} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
               <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shrink-0">
                 <Phone className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("contact_phone")}</div>
-                <div className="text-primary font-bold text-lg" dir="ltr">{PHONE}</div>
+                <div className="text-primary font-bold text-lg" dir="ltr">{displayPhone}</div>
               </div>
             </a>
+
+            {isContactPageVariant && (
+              <a href={`mailto:${CONTACT_PAGE_EMAIL}`} className="card-soft p-5 flex items-start gap-4 hover:border-primary min-h-0">
+                <div className="h-12 w-12 rounded-xl bg-primary-soft flex items-center justify-center shrink-0">
+                  <Mail className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Email</div>
+                  <div className="text-foreground font-medium break-all">{CONTACT_PAGE_EMAIL}</div>
+                </div>
+              </a>
+            )}
 
             <div className="card-soft p-5 flex items-start gap-4">
               <div className="h-12 w-12 rounded-xl bg-secondary-soft flex items-center justify-center shrink-0">
@@ -80,13 +160,31 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
               </div>
             </div>
 
-            <div className="card-soft overflow-hidden mt-2">
-              <iframe
-                title="Map - Bhalegaon"
-                src={`https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=16&output=embed`}
-                className="w-full h-80 border-0"
-                loading="lazy"
-              />
+            <div className="card-soft mt-2 p-3 sm:p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Find us on map</div>
+                  <div className="text-xs text-muted-foreground">Lat {BHALEGAON_LAT}, Lng {BHALEGAON_LNG}</div>
+                </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${BHALEGAON_LAT},${BHALEGAON_LNG}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
+                >
+                  Open <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+                <iframe
+                  title="Map - Bhalegaon"
+                  src={mapsUrl}
+                  className="w-full h-[260px] sm:h-[320px] lg:h-[360px] border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              </div>
             </div>
           </div>
 
@@ -100,6 +198,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 className="mt-1.5 h-12 text-base rounded-xl"
                 maxLength={80}
                 required
+                disabled={loading || isSubmitted}
               />
             </div>
             <div>
@@ -113,6 +212,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 className="mt-1.5 h-12 text-base rounded-xl"
                 maxLength={15}
                 required
+                disabled={loading || isSubmitted}
               />
             </div>
             <div>
@@ -124,18 +224,36 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 className="mt-1.5 text-base rounded-xl min-h-[140px]"
                 maxLength={1000}
                 required
+                disabled={loading || isSubmitted}
               />
             </div>
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || isSubmitted}
               className="w-full h-12 bg-primary hover:bg-primary-hover text-primary-foreground text-base font-semibold rounded-xl"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("form_submit")}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : submitButtonLabel}
             </Button>
           </form>
         </div>
       </div>
     </section>
   );
+}
+
+function getFormspreeErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const errors = (payload as { errors?: Array<{ message?: string }> }).errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  return errors[0]?.message ?? null;
+}
+
+function getSafeFormspreeEndpoint(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }

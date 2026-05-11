@@ -18,9 +18,15 @@ export function ServiceCard({ s }: { s: ManagedService }) {
       to={`/services/${s.id}`}
       className="card-soft p-5 flex flex-col h-full group min-h-0"
     >
-      <div className="h-11 w-11 rounded-xl bg-primary-soft flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-        <Icon className="h-5 w-5 text-primary group-hover:text-primary-foreground" />
-      </div>
+      {s.image_url ? (
+        <div className="h-28 rounded-xl overflow-hidden mb-4 border border-border">
+          <img src={s.image_url} alt={s.title} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+      ) : (
+        <div className="h-11 w-11 rounded-xl bg-primary-soft flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+          <Icon className="h-5 w-5 text-primary group-hover:text-primary-foreground" />
+        </div>
+      )}
       <h3 className="text-base font-bold text-foreground mb-1.5">{s.title}</h3>
       <p className="text-sm text-muted-foreground mb-5 flex-1">{s.description}</p>
       <div className="flex items-center gap-1.5 text-sm font-semibold text-primary min-h-0">

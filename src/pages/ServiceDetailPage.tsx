@@ -72,6 +72,11 @@ const ServiceDetailPage = () => {
               <ArrowLeft className="h-4 w-4" /> {t("back")}
             </Link>
             <div className="chip chip-primary mb-4">{t(`cat_${service.category}` as const)}</div>
+            {service.image_url && (
+              <div className="mb-5 max-w-3xl rounded-2xl overflow-hidden border border-border">
+                <img src={service.image_url} alt={service.title} className="w-full h-56 sm:h-72 object-cover" loading="lazy" />
+              </div>
+            )}
             <h1 className="text-3xl sm:text-5xl font-extrabold mb-4 max-w-3xl">{service.title}</h1>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl">{service.details || service.description}</p>
           </div>

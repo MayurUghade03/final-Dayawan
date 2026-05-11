@@ -16,7 +16,7 @@ const ContactPage = () => {
             <p className="text-muted-foreground">{t("contact_sub")}</p>
           </div>
         </section>
-        <Contact withHeading={false} />
+        <Contact withHeading={false} variant="contact-page" />
       </main>
       <Footer />
     </div>

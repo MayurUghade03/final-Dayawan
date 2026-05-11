@@ -8,6 +8,7 @@ create table if not exists public.services (
   category text not null check (category in ('gov', 'farm', 'online')),
   title text not null,
   description text not null,
+  image_url text,
   details text,
   required_documents jsonb not null default '[]'::jsonb,
   fee_amount numeric(10,2) not null default 0,
@@ -18,6 +19,9 @@ create table if not exists public.services (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.services
+  add column if not exists image_url text;
 
 create table if not exists public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -526,21 +530,22 @@ with check (
   and public.current_user_role() = 'admin'
 );
 
-insert into public.services (id, category, title, description, details, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)
+insert into public.services (id, category, title, description, image_url, details, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)
 values
-  ('aadhaar', 'gov', 'Aadhaar Card Service', 'New Aadhaar, update, correction', 'New Aadhaar enrolment, name/address/DOB correction and mobile update — all in one place.', '["ID proof", "Address proof", "Photo"]'::jsonb, 50, 'From ₹50', 'none', '[{"id":"aadhaar-gender","key":"gender","label":"Gender","type":"text","required":false}]'::jsonb, true),
-  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', 'New PAN application, corrections and re-print — quickly.', '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'stripe', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
-  ('rationcard', 'gov', 'Ration Card', 'New ration card, add member', 'Apply for new ration card and member updates.', '["Aadhaar card", "Income certificate"]'::jsonb, 0, 'Nominal fee', 'none', '[]'::jsonb, true),
-  ('pmkisan', 'farm', 'PM Kisan Yojana', '₹6000/year support for farmers', 'Enrolment and updates for PM Kisan assistance.', '["Aadhaar card", "7/12 land record", "Bank passbook"]'::jsonb, 0, 'Free enrolment', 'none', '[]'::jsonb, true),
-  ('cropinsurance', 'farm', 'Crop Insurance', 'Protection from natural calamities', 'Crop insurance registration and claim support.', '["7/12 record", "Aadhaar card"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
-  ('soilcard', 'farm', 'Soil Health Card', 'Soil testing and advice', 'Register for soil health card and land sample guidance.', '["7/12 record"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
-  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
-  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
-  ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', 'Print, photocopy and scan support.', '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
+  ('aadhaar', 'gov', 'Aadhaar Card Service', 'New Aadhaar, update, correction', null, 'New Aadhaar enrolment, name/address/DOB correction and mobile update — all in one place.', '["ID proof", "Address proof", "Photo"]'::jsonb, 50, 'From ₹50', 'none', '[{"id":"aadhaar-gender","key":"gender","label":"Gender","type":"text","required":false}]'::jsonb, true),
+  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', null, 'New PAN application, corrections and re-print — quickly.', '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'stripe', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
+  ('rationcard', 'gov', 'Ration Card', 'New ration card, add member', null, 'Apply for new ration card and member updates.', '["Aadhaar card", "Income certificate"]'::jsonb, 0, 'Nominal fee', 'none', '[]'::jsonb, true),
+  ('pmkisan', 'farm', 'PM Kisan Yojana', '₹6000/year support for farmers', null, 'Enrolment and updates for PM Kisan assistance.', '["Aadhaar card", "7/12 land record", "Bank passbook"]'::jsonb, 0, 'Free enrolment', 'none', '[]'::jsonb, true),
+  ('cropinsurance', 'farm', 'Crop Insurance', 'Protection from natural calamities', null, 'Crop insurance registration and claim support.', '["7/12 record", "Aadhaar card"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
+  ('soilcard', 'farm', 'Soil Health Card', 'Soil testing and advice', null, 'Register for soil health card and land sample guidance.', '["7/12 record"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
+  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', null, 'Bill payment support for electricity and water services.', '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
+  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', null, 'Recharge support for all operators.', '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
+  ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', null, 'Print, photocopy and scan support.', '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
 on conflict (id) do update set
   category = excluded.category,
   title = excluded.title,
   description = excluded.description,
+  image_url = excluded.image_url,
   details = excluded.details,
   required_documents = excluded.required_documents,
   fee_amount = excluded.fee_amount,
