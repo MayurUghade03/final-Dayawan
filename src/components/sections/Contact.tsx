@@ -24,6 +24,7 @@ const BHALEGAON_LNG = 76.5570153;
 const DEFAULT_MAP_ZOOM = 16;
 const CONTACT_MAP_ZOOM = 17;
 const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+const CONTACT_FORM_SOURCE = "dayawan-contact-page";
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -42,6 +43,7 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
   const displayPhone = isContactPageVariant ? CONTACT_PAGE_PHONE : DEFAULT_PHONE;
   const telHref = `tel:${phone}`;
   const mapZoom = isContactPageVariant ? CONTACT_MAP_ZOOM : DEFAULT_MAP_ZOOM;
+  const submitButtonLabel = isSubmitted ? "Submitted" : t("form_submit");
 
   const mapsUrl = useMemo(
     () => `https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=${mapZoom}&output=embed`,
@@ -75,20 +77,14 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
           name: parsed.data.name,
           phone: parsed.data.phone,
           message: parsed.data.message,
-          source: "dayawan-contact-page",
+          source: CONTACT_FORM_SOURCE,
           page: typeof window !== "undefined" ? window.location.href : "contact",
         }),
       });
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        const message =
-          payload && typeof payload === "object" && Array.isArray((payload as { errors?: Array<{ message?: string }> }).errors)
-            ? (() => {
-                const errors = (payload as { errors: Array<{ message?: string }> }).errors;
-                return errors.length > 0 ? errors[0]?.message : null;
-              })()
-            : "Unable to submit the form right now.";
+        const message = getFormspreeErrorMessage(payload) ?? "Unable to submit the form right now.";
         throw new Error(message || "FORM_SUBMIT_FAILED");
       }
 
@@ -231,11 +227,18 @@ export function Contact({ withHeading = true, variant = "default" }: ContactProp
               disabled={loading || isSubmitted}
               className="w-full h-12 bg-primary hover:bg-primary-hover text-primary-foreground text-base font-semibold rounded-xl"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : isSubmitted ? "Submitted" : t("form_submit")}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : submitButtonLabel}
             </Button>
           </form>
         </div>
       </div>
     </section>
   );
+}
+
+function getFormspreeErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const errors = (payload as { errors?: Array<{ message?: string }> }).errors;
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  return errors[0]?.message ?? null;
 }

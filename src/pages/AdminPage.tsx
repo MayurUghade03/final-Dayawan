@@ -51,6 +51,7 @@ const AdminPage = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [editingService, setEditingService] = useState<ManagedService | null>(null);
   const [savingService, setSavingService] = useState(false);
+  const [pendingDeleteServiceId, setPendingDeleteServiceId] = useState<string | null>(null);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingUserId, setSavingUserId] = useState<string>("");
@@ -154,8 +155,6 @@ const AdminPage = () => {
 
   const deleteService = async () => {
     if (!editingService) return;
-    const confirmed = window.confirm(`Delete service "${editingService.title || editingService.id}"?`);
-    if (!confirmed) return;
 
     try {
       await removeService(editingService.id);
@@ -163,6 +162,7 @@ const AdminPage = () => {
       const remaining = services.filter((item) => item.id !== editingService.id);
       setSelectedServiceId(remaining[0]?.id ?? "");
       setEditingService(remaining[0] ?? null);
+      setPendingDeleteServiceId(null);
     } catch {
       toast.error("Failed to delete service.");
     }
@@ -211,7 +211,7 @@ const AdminPage = () => {
       }
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = documentItem.name || "document";
+      anchor.download = sanitizeDocumentFilename(documentItem.name || "document");
       anchor.rel = "noopener noreferrer";
       document.body.appendChild(anchor);
       anchor.click();
@@ -528,10 +528,36 @@ const AdminPage = () => {
                       <Button onClick={saveService} disabled={savingService}>
                         {savingService ? "Saving..." : "Save service"}
                       </Button>
-                      <Button type="button" variant="destructive" onClick={() => void deleteService()}>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        aria-label={`Delete service ${editingService.title || editingService.id}`}
+                        onClick={() => setPendingDeleteServiceId(editingService.id)}
+                      >
                         Delete service
                       </Button>
                     </div>
+                    {pendingDeleteServiceId === editingService.id && (
+                      <div
+                        className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+                        role="alertdialog"
+                        aria-live="polite"
+                        aria-label={`Confirm delete ${editingService.title || editingService.id}`}
+                      >
+                        <div className="text-sm font-medium">Delete this service permanently?</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          This removes the service configuration without changing existing users, applications, or uploaded files.
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" variant="destructive" onClick={() => void deleteService()}>
+                            Confirm delete
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => setPendingDeleteServiceId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -804,4 +830,9 @@ function normalizeUserProfile(row: Database["public"]["Tables"]["user_profiles"]
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function sanitizeDocumentFilename(name: string): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
+  return sanitized || "document";
 }
