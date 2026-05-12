@@ -20,6 +20,7 @@ export function ThemeSwitcher() {
     globalDefaultThemeId,
     activeTheme,
   } = useTheme();
+  const paletteOptions = availableThemes.slice(0, 3);
 
   return (
     <DropdownMenu>
@@ -71,7 +72,7 @@ export function ThemeSwitcher() {
           Follow global default ({globalDefaultThemeId === activeTheme.id ? activeTheme.name : "Default"}){" "}
           {!selectedThemeId ? "✓" : ""}
         </DropdownMenuItem>
-        {availableThemes.map((theme) => (
+        {paletteOptions.map((theme) => (
           <DropdownMenuItem
             key={theme.id}
             className="cursor-pointer"

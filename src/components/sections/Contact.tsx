@@ -3,14 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Phone, MapPin, Clock, Loader2 } from "lucide-react";
+import { Phone, MapPin, Clock, Loader2, Mail, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
-const PHONE = "+919999999999";
+const PHONE = "7264953363";
+const PHONE_HREF = `+91${PHONE}`;
+const EMAIL = "mangeshnikas210@gmail.com";
 const BHALEGAON_LAT = 20.2206441;
 const BHALEGAON_LNG = 76.5570153;
+const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -25,16 +29,61 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       toast.error(t("form_error"));
       return;
     }
+
+    const endpoint = getFormspreeEndpoint(FORMSPREE_ENDPOINT);
+    if (!endpoint) {
+      toast.error("Contact form is not configured yet.");
+      return;
+    }
+
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    toast.success(t("form_success"));
-    setForm({ name: "", phone: "", message: "" });
-    setLoading(false);
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(parsed.data),
+        signal: controller.signal,
+      });
+      window.clearTimeout(timer);
+
+      if (!response.ok) {
+        const fallbackMessage = "Failed to send message. Please try again.";
+        const payload = await response.json().catch(() => null) as { errors?: Array<{ message?: string }> } | null;
+        const errorMessage = payload?.errors?.[0]?.message || fallbackMessage;
+        toast.error(errorMessage);
+        return;
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        const { error: contactLogError } = await supabase.from("contact_requests").insert({
+          name: parsed.data.name,
+          phone: parsed.data.phone,
+          message: parsed.data.message,
+          source: "website-contact-form",
+        });
+        if (contactLogError) {
+          console.error("Unable to store contact request in Supabase:", contactLogError);
+        }
+      }
+
+      toast.success(t("form_success"));
+      setForm({ name: "", phone: "", message: "" });
+    } catch {
+      toast.error("Unable to submit right now. Please try again in a moment.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,13 +99,23 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
 
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
           <div className="space-y-5">
-            <a href={`tel:${PHONE}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
+            <a href={`tel:${PHONE_HREF}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
               <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shrink-0">
                 <Phone className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("contact_phone")}</div>
                 <div className="text-primary font-bold text-lg" dir="ltr">{PHONE}</div>
+              </div>
+            </a>
+
+            <a href={`mailto:${EMAIL}`} className="card-soft p-5 flex items-center gap-4 hover:border-primary min-h-0">
+              <div className="h-12 w-12 rounded-xl bg-primary-soft flex items-center justify-center shrink-0">
+                <Mail className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email</div>
+                <div className="text-primary font-bold text-base break-all">{EMAIL}</div>
               </div>
             </a>
 
@@ -80,13 +139,25 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
               </div>
             </div>
 
-            <div className="card-soft overflow-hidden mt-2">
+            <div className="card-soft overflow-hidden mt-2 rounded-2xl border border-border bg-muted/20">
               <iframe
                 title="Map - Bhalegaon"
-                src={`https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=16&output=embed`}
-                className="w-full h-80 border-0"
+                src={`https://www.google.com/maps?q=${BHALEGAON_LAT},${BHALEGAON_LNG}&z=17&output=embed`}
+                className="w-full h-80 border-0 rounded-2xl"
                 loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
               />
+              <div className="p-3 border-t border-border bg-background/90">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${BHALEGAON_LAT},${BHALEGAON_LNG}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                >
+                  Open interactive map
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </div>
           </div>
 
@@ -99,6 +170,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="mt-1.5 h-12 text-base rounded-xl"
                 maxLength={80}
+                disabled={loading}
                 required
               />
             </div>
@@ -112,6 +184,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className="mt-1.5 h-12 text-base rounded-xl"
                 maxLength={15}
+                disabled={loading}
                 required
               />
             </div>
@@ -123,6 +196,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 className="mt-1.5 text-base rounded-xl min-h-[140px]"
                 maxLength={1000}
+                disabled={loading}
                 required
               />
             </div>
@@ -138,4 +212,15 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
       </div>
     </section>
   );
+}
+
+function getFormspreeEndpoint(value?: string): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }

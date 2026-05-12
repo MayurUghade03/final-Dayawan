@@ -32,8 +32,8 @@ export function Footer() {
         <div>
           <div className="text-sm font-semibold text-background mb-3">{t("nav_contact")}</div>
           <ul className="space-y-2 text-sm text-background/70">
-            <li className="flex items-start gap-2 min-h-0"><Phone className="h-4 w-4 mt-0.5 text-background shrink-0" /><span dir="ltr">+91 99999 99999</span></li>
-            <li className="flex items-start gap-2 min-h-0"><Mail className="h-4 w-4 mt-0.5 text-background shrink-0" /><span>hello@dayawan.in</span></li>
+            <li className="flex items-start gap-2 min-h-0"><Phone className="h-4 w-4 mt-0.5 text-background shrink-0" /><span dir="ltr">+91 72649 53363</span></li>
+            <li className="flex items-start gap-2 min-h-0"><Mail className="h-4 w-4 mt-0.5 text-background shrink-0" /><span>mangeshnikas210@gmail.com</span></li>
             <li className="flex items-start gap-2 min-h-0"><MapPin className="h-4 w-4 mt-0.5 text-background shrink-0" /><span>{t("address_value")}</span></li>
           </ul>
         </div>

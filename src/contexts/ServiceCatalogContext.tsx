@@ -2,12 +2,15 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { SERVICES } from "@/i18n/translations";
 import type { Database, ManagedService, ServiceCategory, ServiceFormField } from "@/types";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ServiceCatalogCtx = {
   services: ManagedService[];
   loadingServices: boolean;
   getServiceById: (id: string) => ManagedService | undefined;
   upsertService: (service: ManagedService) => Promise<void>;
+  deleteService: (serviceId: string) => Promise<void>;
+  setServiceActive: (serviceId: string, active: boolean) => Promise<void>;
   createServiceDraft: () => ManagedService;
 };
 
@@ -20,6 +23,7 @@ const defaultServices: ManagedService[] = SERVICES.map((service) => ({
   title: service.title.en,
   description: service.desc.en,
   details: service.long?.en ?? service.desc.en,
+  image_url: undefined,
   required_documents: service.docs.map((doc) => doc.en),
   fee_amount: parseFeeAmount(service.fee?.en),
   fee_note: service.fee?.en,
@@ -29,6 +33,7 @@ const defaultServices: ManagedService[] = SERVICES.map((service) => ({
 }));
 
 export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth();
   const [services, setServices] = useState<ManagedService[]>(() => loadServices());
   const [loadingServices, setLoadingServices] = useState(false);
   const canUseSupabase = Boolean(isSupabaseConfigured && supabase);
@@ -40,11 +45,16 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     }
 
     setLoadingServices(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("services")
       .select("*")
-      .eq("active", true)
       .order("id", { ascending: true });
+
+    if (!isAdmin) {
+      query = query.eq("active", true);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Failed to fetch services from Supabase:", error);
@@ -54,15 +64,10 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     }
 
     const normalized = (data ?? []).map(normalizeRemoteService);
-    if (normalized.length > 0) {
-      setServices(normalized);
-      saveServices(normalized);
-    } else {
-      const fallback = loadServices();
-      setServices(fallback);
-    }
+    setServices(normalized);
+    saveServices(normalized);
     setLoadingServices(false);
-  }, [canUseSupabase]);
+  }, [canUseSupabase, isAdmin]);
 
   useEffect(() => {
     void refreshServices();
@@ -78,6 +83,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
         title: normalized.title,
         description: normalized.description,
         details: normalized.details ?? null,
+        image_url: normalized.image_url ?? null,
         required_documents: normalized.required_documents,
         fee_amount: normalized.fee_amount,
         fee_note: normalized.fee_note ?? null,
@@ -100,6 +106,43 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     });
   }, [canUseSupabase]);
 
+  const deleteService = useCallback(async (serviceId: string) => {
+    const normalizedId = sanitizeServiceId(serviceId);
+    if (canUseSupabase && supabase) {
+      const { error } = await supabase.from("services").delete().eq("id", normalizedId);
+      if (error) {
+        console.error("Failed to delete service:", error);
+        throw new Error("SERVICE_DELETE_FAILED");
+      }
+    }
+
+    setServices((prev) => {
+      const next = prev.filter((service) => service.id !== normalizedId);
+      saveServices(next);
+      return next;
+    });
+  }, [canUseSupabase]);
+
+  const setServiceActive = useCallback(async (serviceId: string, active: boolean) => {
+    const normalizedId = sanitizeServiceId(serviceId);
+    if (canUseSupabase && supabase) {
+      const { error } = await supabase
+        .from("services")
+        .update({ active })
+        .eq("id", normalizedId);
+      if (error) {
+        console.error("Failed to update service active status:", error);
+        throw new Error("SERVICE_ACTIVE_UPDATE_FAILED");
+      }
+    }
+
+    setServices((prev) => {
+      const next = prev.map((service) => (service.id === normalizedId ? { ...service, active } : service));
+      saveServices(next);
+      return next;
+    });
+  }, [canUseSupabase]);
+
   const getServiceById = useCallback((id: string) => services.find((service) => service.id === id), [services]);
 
   const createServiceDraft = useCallback((): ManagedService => ({
@@ -108,6 +151,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     title: "",
     description: "",
     details: "",
+    image_url: "",
     required_documents: [],
     fee_amount: 0,
     fee_note: "",
@@ -117,8 +161,16 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
   }), []);
 
   const value = useMemo<ServiceCatalogCtx>(
-    () => ({ services, loadingServices, getServiceById, upsertService, createServiceDraft }),
-    [services, loadingServices, getServiceById, upsertService, createServiceDraft],
+    () => ({
+      services,
+      loadingServices,
+      getServiceById,
+      upsertService,
+      deleteService,
+      setServiceActive,
+      createServiceDraft,
+    }),
+    [services, loadingServices, getServiceById, upsertService, deleteService, setServiceActive, createServiceDraft],
   );
 
   return <ServiceCatalogContext.Provider value={value}>{children}</ServiceCatalogContext.Provider>;
@@ -164,6 +216,7 @@ function normalizeManagedService(service: ManagedService): ManagedService {
     title: service.title.trim() || "Untitled Service",
     description: service.description.trim() || "Service details will be updated soon.",
     details: service.details?.trim() || service.description.trim() || "Service details will be updated soon.",
+    image_url: service.image_url?.trim() || "",
     required_documents: service.required_documents.map((item) => item.trim()).filter(Boolean),
     fee_amount: Number.isFinite(service.fee_amount) ? Math.max(0, service.fee_amount) : 0,
     fee_note: service.fee_note?.trim() || "",
@@ -208,6 +261,7 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
     title: row.title,
     description: row.description,
     details: row.details ?? undefined,
+    image_url: row.image_url ?? undefined,
     required_documents: safeDocuments,
     fee_amount: Number(row.fee_amount ?? 0),
     fee_note: row.fee_note ?? undefined,
