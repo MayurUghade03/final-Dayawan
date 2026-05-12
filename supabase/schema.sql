@@ -583,6 +583,7 @@ values
   ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', null, '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
   ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', null, '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
   ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', 'Print, photocopy and scan support.', null, '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
+-- Preserve existing admin-managed service data; only seed missing IDs.
 on conflict (id) do nothing;
 
 -- Bootstrap admin user for first login

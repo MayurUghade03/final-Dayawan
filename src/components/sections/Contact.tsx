@@ -15,6 +15,11 @@ const EMAIL = "mangeshnikas210@gmail.com";
 const BHALEGAON_LAT = 20.2206441;
 const BHALEGAON_LNG = 76.5570153;
 const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+const FORMSPREE_TIMEOUT_MS = 12000;
+
+type FormspreeErrorResponse = {
+  errors?: Array<{ message?: string }>;
+};
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -45,7 +50,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
     setLoading(true);
     try {
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 15000);
+      const timer = window.setTimeout(() => controller.abort(), FORMSPREE_TIMEOUT_MS);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -59,7 +64,7 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
 
       if (!response.ok) {
         const fallbackMessage = "Failed to send message. Please try again.";
-        const payload = await response.json().catch(() => null) as { errors?: Array<{ message?: string }> } | null;
+        const payload = await response.json().catch(() => null) as FormspreeErrorResponse | null;
         const errorMessage = payload?.errors?.[0]?.message || fallbackMessage;
         toast.error(errorMessage);
         return;
@@ -219,6 +224,8 @@ function getFormspreeEndpoint(value?: string): string | null {
   try {
     const url = new URL(value.trim());
     if (url.protocol !== "https:") return null;
+    if (url.hostname !== "formspree.io" && !url.hostname.endsWith(".formspree.io")) return null;
+    if (!/^\/f\/[\w-]+\/?$/.test(url.pathname)) return null;
     return url.toString();
   } catch {
     return null;

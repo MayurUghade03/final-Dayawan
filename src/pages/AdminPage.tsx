@@ -39,6 +39,7 @@ const SECTIONS: Array<{ id: AdminSection; label: string; icon: typeof FileText }
   { id: "contacts", label: "Contact Requests", icon: Phone },
   { id: "settings", label: "Settings", icon: Settings },
 ];
+const MAX_THEME_OPTIONS = 3;
 
 const AdminPage = () => {
   const { t } = useLang();
@@ -115,7 +116,7 @@ const AdminPage = () => {
     () => services.map((service) => ({ id: service.id, label: `${service.title}${service.active ? "" : " (Inactive)"}` })),
     [services],
   );
-  const themeOptions = useMemo(() => themes.slice(0, 3).map((theme) => ({ id: theme.id, label: theme.name })), [themes]);
+  const themeOptions = useMemo(() => themes.slice(0, MAX_THEME_OPTIONS).map((theme) => ({ id: theme.id, label: theme.name })), [themes]);
   const editingTheme = useMemo(() => themes.find((theme) => theme.id === selectedThemeEditorId) ?? null, [themes, selectedThemeEditorId]);
 
   useEffect(() => {
@@ -488,7 +489,7 @@ const AdminPage = () => {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <div className="font-semibold">{documentItem.name}</div>
-                              <div className="text-xs text-muted-foreground">{detectDocumentType(documentItem.name)} • {documentItem.size ? `${(documentItem.size / 1024).toFixed(1)} KB` : "Unknown size"}</div>
+                              <div className="text-xs text-muted-foreground">{detectDocumentType(documentItem.name)} • {formatDocumentSize(documentItem.size)}</div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button size="sm" variant="outline" onClick={() => void openDocument(documentItem, "preview")}><Eye className="h-4 w-4 mr-1" />Preview</Button>
@@ -642,6 +643,11 @@ function detectDocumentType(name: string): string {
   if (ext === "pdf") return "PDF";
   if (["doc", "docx", "rtf"].includes(ext)) return "Document";
   return ext.toUpperCase();
+}
+
+function formatDocumentSize(size?: number): string {
+  if (!Number.isFinite(size) || !size || size <= 0) return "Unknown size";
+  return `${(size / 1024).toFixed(1)} KB`;
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
