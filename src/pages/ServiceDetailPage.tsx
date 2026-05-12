@@ -74,6 +74,11 @@ const ServiceDetailPage = () => {
             <div className="chip chip-primary mb-4">{t(`cat_${service.category}` as const)}</div>
             <h1 className="text-3xl sm:text-5xl font-extrabold mb-4 max-w-3xl">{service.title}</h1>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl">{service.details || service.description}</p>
+            {service.image_url && (
+              <div className="mt-6 max-w-3xl rounded-2xl overflow-hidden border border-border bg-muted/30">
+                <img src={service.image_url} alt={service.title} className="w-full max-h-[320px] object-cover" loading="lazy" />
+              </div>
+            )}
           </div>
         </section>
 
@@ -317,7 +322,7 @@ const ServiceDetailPage = () => {
                 <p className="text-sm text-primary-foreground/80 mb-4">{t("contact_sub")}</p>
                 <div className="space-y-2">
                   <Button asChild size="lg" variant="secondary" className="w-full rounded-xl h-12 font-semibold">
-                    <a href="tel:+919999999999"><Phone className="mr-2 h-4 w-4" /> +91 99999 99999</a>
+                    <a href="tel:+917264953363"><Phone className="mr-2 h-4 w-4" /> +91 72649 53363</a>
                   </Button>
                   <Button
                     onClick={() => { toast.success(t("form_success")); navigate("/contact"); }}

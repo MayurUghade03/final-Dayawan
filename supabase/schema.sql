@@ -9,6 +9,7 @@ create table if not exists public.services (
   title text not null,
   description text not null,
   details text,
+  image_url text,
   required_documents jsonb not null default '[]'::jsonb,
   fee_amount numeric(10,2) not null default 0,
   fee_note text,
@@ -78,6 +79,17 @@ create table if not exists public.service_applications (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.contact_requests (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text not null,
+  message text not null,
+  status text not null default 'new' check (status in ('new', 'in_progress', 'resolved')),
+  source text not null default 'website-contact-form',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.service_applications
   -- Backward-compatible migration for existing deployments created before new fields.
   add column if not exists submitted_payload jsonb,
@@ -86,6 +98,9 @@ alter table public.service_applications
   add column if not exists payment_provider text,
   add column if not exists payment_reference text,
   add column if not exists amount numeric(10,2) default 0;
+
+alter table public.services
+  add column if not exists image_url text;
 
 update public.service_applications
 set payment_status = coalesce(payment_status, 'pending')
@@ -106,6 +121,8 @@ create index if not exists idx_services_active on public.services(active);
 create index if not exists idx_service_applications_user_id on public.service_applications(user_id);
 create index if not exists idx_service_applications_code on public.service_applications(code);
 create index if not exists idx_service_applications_updated_at on public.service_applications(updated_at desc);
+create index if not exists idx_contact_requests_status on public.contact_requests(status);
+create index if not exists idx_contact_requests_created_at on public.contact_requests(created_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -120,6 +137,12 @@ $$;
 drop trigger if exists trg_service_applications_updated_at on public.service_applications;
 create trigger trg_service_applications_updated_at
 before update on public.service_applications
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_contact_requests_updated_at on public.contact_requests;
+create trigger trg_contact_requests_updated_at
+before update on public.contact_requests
 for each row
 execute function public.set_updated_at();
 
@@ -256,6 +279,7 @@ alter table public.services enable row level security;
 alter table public.user_profiles enable row level security;
 alter table public.app_themes enable row level security;
 alter table public.app_theme_settings enable row level security;
+alter table public.contact_requests enable row level security;
 
 drop policy if exists "service_applications_select" on public.service_applications;
 create policy "service_applications_select"
@@ -362,6 +386,28 @@ drop policy if exists "app_theme_settings_manage_admin" on public.app_theme_sett
 create policy "app_theme_settings_manage_admin"
 on public.app_theme_settings
 for all
+to authenticated
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
+
+drop policy if exists "contact_requests_insert_public" on public.contact_requests;
+create policy "contact_requests_insert_public"
+on public.contact_requests
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "contact_requests_select_admin" on public.contact_requests;
+create policy "contact_requests_select_admin"
+on public.contact_requests
+for select
+to authenticated
+using (public.current_user_role() = 'admin');
+
+drop policy if exists "contact_requests_manage_admin" on public.contact_requests;
+create policy "contact_requests_manage_admin"
+on public.contact_requests
+for update
 to authenticated
 using (public.current_user_role() = 'admin')
 with check (public.current_user_role() = 'admin');
@@ -526,29 +572,19 @@ with check (
   and public.current_user_role() = 'admin'
 );
 
-insert into public.services (id, category, title, description, details, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)
+insert into public.services (id, category, title, description, details, image_url, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)
 values
-  ('aadhaar', 'gov', 'Aadhaar Card Service', 'New Aadhaar, update, correction', 'New Aadhaar enrolment, name/address/DOB correction and mobile update — all in one place.', '["ID proof", "Address proof", "Photo"]'::jsonb, 50, 'From ₹50', 'none', '[{"id":"aadhaar-gender","key":"gender","label":"Gender","type":"text","required":false}]'::jsonb, true),
-  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', 'New PAN application, corrections and re-print — quickly.', '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'stripe', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
-  ('rationcard', 'gov', 'Ration Card', 'New ration card, add member', 'Apply for new ration card and member updates.', '["Aadhaar card", "Income certificate"]'::jsonb, 0, 'Nominal fee', 'none', '[]'::jsonb, true),
-  ('pmkisan', 'farm', 'PM Kisan Yojana', '₹6000/year support for farmers', 'Enrolment and updates for PM Kisan assistance.', '["Aadhaar card", "7/12 land record", "Bank passbook"]'::jsonb, 0, 'Free enrolment', 'none', '[]'::jsonb, true),
-  ('cropinsurance', 'farm', 'Crop Insurance', 'Protection from natural calamities', 'Crop insurance registration and claim support.', '["7/12 record", "Aadhaar card"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
-  ('soilcard', 'farm', 'Soil Health Card', 'Soil testing and advice', 'Register for soil health card and land sample guidance.', '["7/12 record"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
-  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
-  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
-  ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', 'Print, photocopy and scan support.', '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
-on conflict (id) do update set
-  category = excluded.category,
-  title = excluded.title,
-  description = excluded.description,
-  details = excluded.details,
-  required_documents = excluded.required_documents,
-  fee_amount = excluded.fee_amount,
-  fee_note = excluded.fee_note,
-  payment_provider = excluded.payment_provider,
-  form_schema = excluded.form_schema,
-  active = excluded.active,
-  updated_at = now();
+  ('aadhaar', 'gov', 'Aadhaar Card Service', 'New Aadhaar, update, correction', 'New Aadhaar enrolment, name/address/DOB correction and mobile update — all in one place.', null, '["ID proof", "Address proof", "Photo"]'::jsonb, 50, 'From ₹50', 'none', '[{"id":"aadhaar-gender","key":"gender","label":"Gender","type":"text","required":false}]'::jsonb, true),
+  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', 'New PAN application, corrections and re-print — quickly.', null, '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'stripe', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
+  ('rationcard', 'gov', 'Ration Card', 'New ration card, add member', 'Apply for new ration card and member updates.', null, '["Aadhaar card", "Income certificate"]'::jsonb, 0, 'Nominal fee', 'none', '[]'::jsonb, true),
+  ('pmkisan', 'farm', 'PM Kisan Yojana', '₹6000/year support for farmers', 'Enrolment and updates for PM Kisan assistance.', null, '["Aadhaar card", "7/12 land record", "Bank passbook"]'::jsonb, 0, 'Free enrolment', 'none', '[]'::jsonb, true),
+  ('cropinsurance', 'farm', 'Crop Insurance', 'Protection from natural calamities', 'Crop insurance registration and claim support.', null, '["7/12 record", "Aadhaar card"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
+  ('soilcard', 'farm', 'Soil Health Card', 'Soil testing and advice', 'Register for soil health card and land sample guidance.', null, '["7/12 record"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
+  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', null, '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
+  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', null, '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
+  ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', 'Print, photocopy and scan support.', null, '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
+-- Preserve existing admin-managed service data; only seed missing IDs.
+on conflict (id) do nothing;
 
 -- Bootstrap admin user for first login
 -- Email: admin@dayawan.local
