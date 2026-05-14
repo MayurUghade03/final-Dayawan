@@ -283,5 +283,5 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
 }
 
 function isMissingImageUrlColumnError(error: { code?: string | null; message?: string | null }): boolean {
-  return error.code === "PGRST204" && error.message?.toLowerCase().includes("image_url") === true;
+  return error.code === "PGRST204" && Boolean(error.message?.toLowerCase().includes("image_url"));
 }
