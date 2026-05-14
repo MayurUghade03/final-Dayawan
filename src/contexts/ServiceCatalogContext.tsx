@@ -95,8 +95,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.from("services").upsert(payload, { onConflict: "id" });
       if (error) {
         if (isMissingImageUrlColumnError(error)) {
-          const legacyPayload = { ...payload };
-          delete legacyPayload.image_url;
+          const { image_url, ...legacyPayload } = payload;
           const { error: legacyError } = await supabase.from("services").upsert(legacyPayload, { onConflict: "id" });
           if (legacyError) {
             console.error("Failed to upsert service:", legacyError);
