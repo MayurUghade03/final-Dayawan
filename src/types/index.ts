@@ -110,6 +110,7 @@ export interface ManagedService {
   title: string;
   description: string;
   details?: string;
+  image_url?: string;
   required_documents: string[];
   fee_amount: number;
   fee_note?: string;
@@ -211,6 +212,7 @@ export interface Database {
           title: string;
           description: string;
           details: string | null;
+          image_url: string | null;
           required_documents: string[];
           fee_amount: number;
           fee_note: string | null;
@@ -226,6 +228,7 @@ export interface Database {
           title: string;
           description: string;
           details?: string | null;
+          image_url?: string | null;
           required_documents?: string[];
           fee_amount?: number;
           fee_note?: string | null;
@@ -240,12 +243,43 @@ export interface Database {
           title?: string;
           description?: string;
           details?: string | null;
+          image_url?: string | null;
           required_documents?: string[];
           fee_amount?: number;
           fee_note?: string | null;
           payment_provider?: PaymentProvider;
           form_schema?: ServiceFormField[];
           active?: boolean;
+        };
+      };
+      contact_requests: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string;
+          message: string;
+          status: "new" | "in_progress" | "resolved";
+          source: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          phone: string;
+          message: string;
+          status?: "new" | "in_progress" | "resolved";
+          source?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          phone?: string;
+          message?: string;
+          status?: "new" | "in_progress" | "resolved";
+          source?: string;
+          updated_at?: string;
         };
       };
       user_profiles: {

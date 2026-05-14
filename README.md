@@ -70,6 +70,7 @@ This SQL creates:
 VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 VITE_ADMIN_EMAILS=admin@example.com
+VITE_FORMSPREE_ENDPOINT=https://formspree.io/f/YOUR_FORM_ID
 ```
 
 3. Replace `admin@example.com` with real admin emails (comma-separated if many).
@@ -122,6 +123,7 @@ This project already has `netlify.toml`.
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_ADMIN_EMAILS`
+   - `VITE_FORMSPREE_ENDPOINT`
 6. Deploy
 
 SPA redirects are already configured for React routes.
