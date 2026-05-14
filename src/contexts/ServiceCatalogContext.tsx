@@ -95,7 +95,8 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.from("services").upsert(payload, { onConflict: "id" });
       if (error) {
         if (isMissingImageUrlColumnError(error)) {
-          const { image_url: _ignoredImageUrl, ...legacyPayload } = payload;
+          const legacyPayload = { ...payload };
+          delete legacyPayload.image_url;
           const { error: legacyError } = await supabase.from("services").upsert(legacyPayload, { onConflict: "id" });
           if (legacyError) {
             console.error("Failed to upsert service:", legacyError);
@@ -283,5 +284,5 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
 }
 
 function isMissingImageUrlColumnError(error: { code?: string | null; message?: string | null }): boolean {
-  return error.code === "PGRST204" && Boolean(error.message?.toLowerCase().includes("image_url"));
+  return error.code === "PGRST204" && (error.message?.toLowerCase().includes("image_url") ?? false);
 }
