@@ -134,6 +134,10 @@ alter table public.service_applications
   drop constraint if exists service_applications_payment_provider_check,
   add constraint service_applications_payment_provider_check check (payment_provider is null or payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr'));
 
+alter table public.services
+  drop constraint if exists services_payment_provider_check,
+  add constraint services_payment_provider_check check (payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr'));
+
 update public.contact_requests
 set status = case
   when status = 'resolved' then 'replied'
