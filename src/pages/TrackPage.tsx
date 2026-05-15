@@ -115,7 +115,7 @@ const TrackPage = () => {
                     </div>
                   </div>
                   <div className="mb-6 text-sm text-muted-foreground">
-                    Payment: {result.data.payment_status === "paid" ? "Paid" : "Pending"} {result.data.payment_reference ? `• ${result.data.payment_reference}` : ""}
+                    Payment: {formatPaymentStatus(result.data.payment_status)} {result.data.payment_reference ? `• ${result.data.payment_reference}` : ""} {result.data.transaction_id ? `• ${result.data.transaction_id}` : ""}
                   </div>
 
                   <ol className="relative grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -167,3 +167,9 @@ const TrackPage = () => {
 };
 
 export default TrackPage;
+
+function formatPaymentStatus(status: string): string {
+  if (status === "verified" || status === "paid") return "Verified";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
+}

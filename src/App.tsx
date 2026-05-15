@@ -21,6 +21,8 @@ import RegisterPage from "./pages/RegisterPage.tsx";
 import DashboardPage from "./pages/DashboardPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import VerifyEmailPage from "./pages/VerifyEmailPage.tsx";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -46,16 +48,17 @@ const App = () => (
                   <ScrollToTop />
                   <Routes>
                     <Route path="/" element={<Index />} />
-                    <Route path="/services" element={<ServicesPage />} />
-                    <Route path="/services/:id" element={<ServiceDetailPage />} />
-                    <Route path="/track" element={<TrackPage />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/admin" element={<AdminPage />} />
+                    <Route path="/services" element={<ProtectedRoute><ServicesPage /></ProtectedRoute>} />
+                    <Route path="/services/:id" element={<ProtectedRoute><ServiceDetailPage /></ProtectedRoute>} />
+                    <Route path="/track" element={<ProtectedRoute><TrackPage /></ProtectedRoute>} />
+                    <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+                    <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
                     <Route path="/faq" element={<FAQPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/contact" element={<ContactPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </BrowserRouter>
