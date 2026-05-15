@@ -16,10 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useTheme } from "@/contexts/ThemeContext";
 import { AppTheme, THEME_TOKEN_FIELDS } from "@/theme/themes";
-import { Download, Eye, FileText, FolderOpen, Phone, Settings, Users } from "lucide-react";
+import { Download, Eye, FileText, FolderOpen, Phone, Search, Settings, Trash2, Users } from "lucide-react";
 
 type AdminSection = "overview" | "services" | "users" | "documents" | "queue" | "contacts" | "settings";
-type ContactRequestStatus = "new" | "in_progress" | "resolved";
+type ContactRequestStatus = "new" | "read" | "replied" | "in_progress" | "resolved";
 type ContactRequest = Database["public"]["Tables"]["contact_requests"]["Row"];
 
 const STATUS_LABEL_KEYS: Record<ApplicationStatus, "status_submitted" | "status_received" | "status_processing" | "status_ready" | "status_completed"> = {
@@ -44,7 +44,13 @@ const MAX_THEME_OPTIONS = 3;
 const AdminPage = () => {
   const { t } = useLang();
   const { status, isAdmin } = useAuth();
-  const { applications, updateApplicationStatus } = useApplications();
+  const {
+    applications,
+    updateApplicationStatus,
+    updateApplicationPaymentStatus,
+    deleteApplication,
+    deleteApplicationDocument,
+  } = useApplications();
   const { services, upsertService, deleteService, setServiceActive, createServiceDraft } = useServiceCatalog();
   const {
     themes,
@@ -69,6 +75,10 @@ const AdminPage = () => {
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [updatingContactId, setUpdatingContactId] = useState<string>("");
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [queueSearch, setQueueSearch] = useState("");
+  const [queuePaymentFilter, setQueuePaymentFilter] = useState<"all" | "pending" | "verified" | "rejected">("all");
+  const [contactSearch, setContactSearch] = useState("");
 
   useEffect(() => {
     if (!selectedServiceId && services.length > 0) setSelectedServiceId(services[0].id);
@@ -135,10 +145,47 @@ const AdminPage = () => {
       (app.submitted_documents ?? []).map((documentItem, index) => ({
         id: `${app.id}-${documentItem.path || documentItem.url || documentItem.name}-${index}`,
         app,
+        index,
         documentItem,
       })),
     )
   ), [applications]);
+
+  const filteredDocumentEntries = useMemo(() => {
+    const key = documentSearch.trim().toLowerCase();
+    if (!key) return documentEntries;
+    return documentEntries.filter(({ app, documentItem }) =>
+      `${app.user_name} ${app.user_email ?? ""} ${app.code} ${documentItem.name}`.toLowerCase().includes(key),
+    );
+  }, [documentEntries, documentSearch]);
+
+  const documentsByUser = useMemo(() => {
+    const grouped = new Map<string, typeof filteredDocumentEntries>();
+    filteredDocumentEntries.forEach((entry) => {
+      const groupKey = entry.app.user_id || entry.app.user_email || entry.app.user_name;
+      const list = grouped.get(groupKey) ?? [];
+      list.push(entry);
+      grouped.set(groupKey, list);
+    });
+    return Array.from(grouped.entries()).map(([key, items]) => ({ key, items }));
+  }, [filteredDocumentEntries]);
+
+  const filteredQueue = useMemo(() => {
+    const key = queueSearch.trim().toLowerCase();
+    return applications.filter((app) => {
+      const matchesSearch = !key || `${app.code} ${app.user_name} ${app.user_email ?? ""} ${app.service_name}`.toLowerCase().includes(key);
+      const matchesPayment = queuePaymentFilter === "all" || normalizePaymentStatus(app.payment_status) === queuePaymentFilter;
+      return matchesSearch && matchesPayment;
+    });
+  }, [applications, queuePaymentFilter, queueSearch]);
+
+  const filteredContactRequests = useMemo(() => {
+    const key = contactSearch.trim().toLowerCase();
+    if (!key) return contactRequests;
+    return contactRequests.filter((request) =>
+      `${request.name} ${request.email ?? ""} ${request.phone} ${request.message}`.toLowerCase().includes(key),
+    );
+  }, [contactRequests, contactSearch]);
 
   if (status === "unauthenticated") return <Navigate to="/login" replace state={{ from: "/admin" }} />;
   if (status === "loading") return null;
@@ -294,7 +341,7 @@ const AdminPage = () => {
                   <StatCard label="Total services" value={String(services.length)} sub={`${services.filter((item) => item.active).length} active`} />
                   <StatCard label="Applications" value={String(applications.length)} sub={`${documentEntries.length} documents`} />
                   <StatCard label="Users" value={String(users.length)} sub={loadingUsers ? "Loading..." : "Managed users"} />
-                  <StatCard label="Contact requests" value={String(contactRequests.length)} sub={`${contactRequests.filter((item) => item.status !== "resolved").length} open`} />
+                  <StatCard label="Contact requests" value={String(contactRequests.length)} sub={`${contactRequests.filter((item) => item.status !== "replied" && item.status !== "resolved").length} open`} />
                 </div>
               )}
 
@@ -361,10 +408,21 @@ const AdminPage = () => {
                       <div>
                         <Label htmlFor="service-payment">Payment readiness</Label>
                         <select id="service-payment" value={editingService.payment_provider} onChange={(e) => setEditingService((prev) => prev ? { ...prev, payment_provider: e.target.value as ManagedService["payment_provider"] } : prev)} className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5">
-                          <option value="none">No provider</option>
-                          <option value="stripe">Stripe</option>
-                          <option value="razorpay">Razorpay</option>
+                          <option value="none">No payment required</option>
+                          <option value="manual_qr">Manual QR payment</option>
+                          <option value="stripe">Stripe (legacy)</option>
+                          <option value="razorpay">Razorpay (legacy)</option>
                         </select>
+                      </div>
+                      <div>
+                        <Label htmlFor="service-qr-image-url">Payment QR image URL</Label>
+                        <Input
+                          id="service-qr-image-url"
+                          value={editingService.payment_qr_image_url || ""}
+                          onChange={(e) => setEditingService((prev) => prev ? { ...prev, payment_qr_image_url: e.target.value } : prev)}
+                          className="mt-1.5"
+                          placeholder="https://..."
+                        />
                       </div>
                       <div className="md:col-span-2">
                         <Label htmlFor="service-fee-note">Fee note</Label>
@@ -372,7 +430,76 @@ const AdminPage = () => {
                       </div>
                       <div className="md:col-span-2">
                         <Label htmlFor="service-docs">Required documents (one per line)</Label>
-                        <Textarea id="service-docs" value={editingService.required_documents.join("\n")} onChange={(e) => setEditingService((prev) => prev ? { ...prev, required_documents: e.target.value.split("\n").map((item) => item.trim()).filter(Boolean) } : prev)} className="mt-1.5" />
+                        <div id="service-docs" className="mt-1.5 space-y-2">
+                          {editingService.required_documents.map((item, index) => (
+                            <div key={`${index}-${item}`} className="flex items-center gap-2">
+                              <Input
+                                value={item}
+                                onChange={(e) =>
+                                  setEditingService((prev) =>
+                                    prev
+                                      ? {
+                                        ...prev,
+                                        required_documents: prev.required_documents.map((doc, docIndex) => (docIndex === index ? e.target.value : doc)),
+                                      }
+                                      : prev,
+                                  )
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key !== "Enter") return;
+                                  e.preventDefault();
+                                  setEditingService((prev) =>
+                                    prev
+                                      ? {
+                                        ...prev,
+                                        required_documents: [
+                                          ...prev.required_documents.slice(0, index + 1),
+                                          "",
+                                          ...prev.required_documents.slice(index + 1),
+                                        ],
+                                      }
+                                      : prev,
+                                  );
+                                }}
+                                placeholder="Document name"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setEditingService((prev) =>
+                                    prev
+                                      ? {
+                                        ...prev,
+                                        required_documents: prev.required_documents.filter((_, docIndex) => docIndex !== index),
+                                      }
+                                      : prev,
+                                  )
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setEditingService((prev) =>
+                                prev
+                                  ? {
+                                    ...prev,
+                                    required_documents: [...prev.required_documents, ""],
+                                  }
+                                  : prev,
+                              )
+                            }
+                          >
+                            Add document row
+                          </Button>
+                        </div>
                       </div>
                       <div className="md:col-span-2 space-y-3">
                         <div className="flex items-center justify-between">
@@ -394,8 +521,35 @@ const AdminPage = () => {
                                 <option value="number">Number</option>
                                 <option value="date">Date</option>
                                 <option value="textarea">Textarea</option>
+                                <option value="select">Select</option>
+                                <option value="file">File Upload</option>
+                                <option value="checkbox">Checkbox</option>
+                                <option value="radio">Radio</option>
                               </select>
                             </div>
+                            {(field.type === "select" || field.type === "radio") && (
+                              <div className="sm:col-span-2">
+                                <Label>Options (one per line)</Label>
+                                <Textarea
+                                  value={(field.options ?? []).join("\n")}
+                                  onChange={(e) =>
+                                    setEditingService((prev) =>
+                                      prev
+                                        ? {
+                                          ...prev,
+                                          form_schema: prev.form_schema.map((item, i) =>
+                                            i === index
+                                              ? { ...item, options: e.target.value.split("\n").map((option) => option.trim()).filter(Boolean) }
+                                              : item,
+                                          ),
+                                        }
+                                        : prev,
+                                    )
+                                  }
+                                  className="mt-1.5"
+                                />
+                              </div>
+                            )}
                             <div className="flex items-center justify-between gap-2">
                               <label className="text-sm inline-flex items-center gap-1">
                                 <input type="checkbox" checked={field.required} onChange={(e) => setEditingService((prev) => prev ? { ...prev, form_schema: prev.form_schema.map((item, i) => i === index ? { ...item, required: e.target.checked } : item) } : prev)} />
@@ -479,24 +633,58 @@ const AdminPage = () => {
 
               {activeSection === "documents" && (
                 <div className="card-soft p-5 space-y-4">
-                  <h2 className="font-bold text-xl">Document Management</h2>
-                  {documentEntries.length === 0 ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h2 className="font-bold text-xl">Document Management</h2>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        value={documentSearch}
+                        onChange={(e) => setDocumentSearch(e.target.value)}
+                        placeholder="Search user, code, or document"
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  {filteredDocumentEntries.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No uploaded documents found.</div>
                   ) : (
                     <div className="space-y-3">
-                      {documentEntries.map(({ id, app, documentItem }) => (
-                        <div key={id} className="rounded-xl border border-border p-4 space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <div className="font-semibold">{documentItem.name}</div>
-                              <div className="text-xs text-muted-foreground">{detectDocumentType(documentItem.name)} • {formatDocumentSize(documentItem.size)}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" onClick={() => void openDocument(documentItem, "preview")}><Eye className="h-4 w-4 mr-1" />Preview</Button>
-                              <Button size="sm" variant="outline" onClick={() => void openDocument(documentItem, "download")}><Download className="h-4 w-4 mr-1" />Download</Button>
-                            </div>
+                      {documentsByUser.map(({ key, items }) => (
+                        <div key={key} className="rounded-xl border border-border p-4 space-y-3">
+                          <div className="font-semibold text-sm">
+                            {items[0]?.app.user_name}
+                            <span className="text-xs text-muted-foreground ml-2">{items[0]?.app.user_email || "No email"}</span>
                           </div>
-                          <div className="text-xs text-muted-foreground">Application: <span className="font-medium text-foreground">{app.code}</span> • User: <span className="font-medium text-foreground">{app.user_name}</span></div>
+                          {items.map(({ id, app, documentItem, index }) => (
+                            <div key={id} className="rounded-lg border border-border p-3 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <div className="font-semibold">{documentItem.name}</div>
+                                  <div className="text-xs text-muted-foreground">{detectDocumentType(documentItem.name)} • {formatDocumentSize(documentItem.size)}</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => void openDocument(documentItem, "preview")}><Eye className="h-4 w-4 mr-1" />Preview</Button>
+                                  <Button size="sm" variant="outline" onClick={() => void openDocument(documentItem, "download")}><Download className="h-4 w-4 mr-1" />Download</Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={async () => {
+                                      if (!window.confirm(`Delete document "${documentItem.name}"?`)) return;
+                                      try {
+                                        await deleteApplicationDocument(app.id, index);
+                                        toast.success("Document deleted.");
+                                      } catch {
+                                        toast.error("Failed to delete document.");
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />Delete
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground">Application: <span className="font-medium text-foreground">{app.code}</span> • Service: <span className="font-medium text-foreground">{app.service_name}</span></div>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
@@ -506,10 +694,30 @@ const AdminPage = () => {
 
               {activeSection === "queue" && (
                 <div className="space-y-4">
-                  <h2 className="font-bold text-xl">Application Queue</h2>
-                  {applications.map((app) => (
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                    <h2 className="font-bold text-xl">Application Queue</h2>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative">
+                        <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Input value={queueSearch} onChange={(e) => setQueueSearch(e.target.value)} placeholder="Search applications" className="pl-9 sm:w-64" />
+                      </div>
+                      <select
+                        value={queuePaymentFilter}
+                        onChange={(e) => setQueuePaymentFilter(e.target.value as typeof queuePaymentFilter)}
+                        className="rounded-xl border border-border bg-background h-10 px-3 text-sm"
+                      >
+                        <option value="all">All payments</option>
+                        <option value="pending">Pending</option>
+                        <option value="verified">Verified</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+                  </div>
+                  {filteredQueue.length === 0 ? (
+                    <div className="card-soft p-5 text-sm text-muted-foreground">No applications match current filters.</div>
+                  ) : filteredQueue.map((app) => (
                     <div key={app.id} className="card-soft p-5">
-                      <div className="grid lg:grid-cols-5 gap-3 items-end">
+                      <div className="grid lg:grid-cols-6 gap-3 items-end">
                         <div>
                           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{t("track_label")}</div>
                           <div className="font-bold">{app.code}</div>
@@ -522,7 +730,7 @@ const AdminPage = () => {
                         <div>
                           <div className="text-xs text-muted-foreground">{t("dashboard_service")}</div>
                           <div className="font-semibold">{app.service_name}</div>
-                          <div className="text-xs text-muted-foreground mt-1">Payment: {app.payment_status === "paid" ? "Paid" : "Pending"} {app.amount ? `• ₹${app.amount.toFixed(2)}` : ""}</div>
+                          <div className="text-xs text-muted-foreground mt-1">Payment: {formatPaymentStatus(app.payment_status)} {app.amount ? `• ₹${app.amount.toFixed(2)}` : ""} {app.transaction_id ? `• ${app.transaction_id}` : ""}</div>
                         </div>
                         <div>
                           <div className="text-xs text-muted-foreground mb-1">{t("admin_current_status")}</div>
@@ -536,6 +744,41 @@ const AdminPage = () => {
                             ))}
                           </select>
                         </div>
+                        <div className="space-y-2">
+                          <label className="text-xs text-muted-foreground block">Payment status</label>
+                          <select
+                            value={normalizePaymentStatus(app.payment_status)}
+                            onChange={async (e) => {
+                              try {
+                                await updateApplicationPaymentStatus(app.id, e.target.value as "pending" | "verified" | "rejected", app.payment_reference, app.transaction_id);
+                                toast.success("Payment status updated.");
+                              } catch {
+                                toast.error("Failed to update payment status.");
+                              }
+                            }}
+                            className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="verified">Verified</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="w-full"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete application ${app.code}?`)) return;
+                              try {
+                                await deleteApplication(app.id);
+                                toast.success("Application deleted.");
+                              } catch {
+                                toast.error("Failed to delete application.");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />Delete
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -544,26 +787,34 @@ const AdminPage = () => {
 
               {activeSection === "contacts" && (
                 <div className="card-soft p-5 space-y-4">
-                  <h2 className="font-bold text-xl">Contact Requests</h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <h2 className="font-bold text-xl">Contact Requests</h2>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Search contact requests" className="pl-9" />
+                    </div>
+                  </div>
                   {!isSupabaseConfigured ? (
                     <div className="text-sm text-muted-foreground">Supabase is required to view contact requests.</div>
                   ) : loadingContacts ? (
                     <div className="text-sm text-muted-foreground">Loading contact requests...</div>
-                  ) : contactRequests.length === 0 ? (
+                  ) : filteredContactRequests.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No contact requests received yet.</div>
                   ) : (
                     <div className="space-y-3">
-                      {contactRequests.map((request) => (
+                      {filteredContactRequests.map((request) => (
                         <div key={request.id} className="rounded-xl border border-border p-4 space-y-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <div className="font-semibold">{request.name}</div>
-                              <div className="text-xs text-muted-foreground">{request.phone}</div>
+                              <div className="text-xs text-muted-foreground">{request.email} • {request.phone}</div>
                             </div>
                             <select className="rounded-lg border border-border bg-background h-9 px-2 text-sm" value={request.status} disabled={updatingContactId === request.id} onChange={(e) => void updateContactStatus(request, e.target.value as ContactRequestStatus)}>
                               <option value="new">New</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="resolved">Resolved</option>
+                              <option value="read">Read</option>
+                              <option value="replied">Replied</option>
+                              <option value="in_progress">In Progress (legacy)</option>
+                              <option value="resolved">Resolved (legacy)</option>
                             </select>
                           </div>
                           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{request.message}</p>
@@ -648,6 +899,19 @@ function detectDocumentType(name: string): string {
 function formatDocumentSize(size?: number): string {
   if (!Number.isFinite(size) || !size || size <= 0) return "Unknown size";
   return `${(size / 1024).toFixed(1)} KB`;
+}
+
+function normalizePaymentStatus(status: string): "pending" | "verified" | "rejected" {
+  if (status === "verified" || status === "rejected" || status === "pending") return status;
+  if (status === "paid") return "verified";
+  return "pending";
+}
+
+function formatPaymentStatus(status: string): string {
+  const normalized = normalizePaymentStatus(status);
+  if (normalized === "verified") return "Verified";
+  if (normalized === "rejected") return "Rejected";
+  return "Pending";
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {

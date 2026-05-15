@@ -27,6 +27,7 @@ interface AuthCtx {
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<AuthError | null>;
   signUp: (email: string, password: string, name: string) => Promise<AuthError | null>;
+  resendVerificationEmail: (email: string) => Promise<AuthError | null>;
   signOut: () => Promise<void>;
 }
 
@@ -282,7 +283,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: name } },
+        options: {
+          data: { full_name: name },
+          emailRedirectTo: getEmailRedirectUrl(),
+        },
+      });
+      return error;
+    },
+    [],
+  );
+
+  const resendVerificationEmail = useCallback(
+    async (email: string): Promise<AuthError | null> => {
+      if (!isSupabaseConfigured || !supabase) return notConfiguredError();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: getEmailRedirectUrl(),
+        },
       });
       return error;
     },
@@ -308,6 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isConfigured: isSupabaseConfigured,
         signIn,
         signUp,
+        resendVerificationEmail,
         signOut,
       }}
     >
@@ -374,4 +394,9 @@ function normalizeProfile(row: Database["public"]["Tables"]["user_profiles"]["Ro
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function getEmailRedirectUrl(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return `${window.location.origin}/verify-email`;
 }

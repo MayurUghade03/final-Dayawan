@@ -23,13 +23,14 @@ type FormspreeErrorResponse = {
 
 const schema = z.object({
   name: z.string().trim().min(2).max(80),
+  email: z.string().trim().email().max(120),
   phone: z.string().trim().min(7).max(15).regex(/^[0-9+\-\s]+$/),
   message: z.string().trim().min(3).max(1000),
 });
 
 export function Contact({ withHeading = true }: { withHeading?: boolean }) {
   const { t } = useLang();
-  const [form, setForm] = useState({ name: "", phone: "", message: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
   const [loading, setLoading] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -41,49 +42,53 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
       return;
     }
 
-    const endpoint = getFormspreeEndpoint(FORMSPREE_ENDPOINT);
-    if (!endpoint) {
-      toast.error("Contact form is not configured yet.");
-      return;
-    }
-
     setLoading(true);
     try {
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), FORMSPREE_TIMEOUT_MS);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(parsed.data),
-        signal: controller.signal,
-      });
-      window.clearTimeout(timer);
-
-      if (!response.ok) {
-        const fallbackMessage = "Failed to send message. Please try again.";
-        const payload = await response.json().catch(() => null) as FormspreeErrorResponse | null;
-        const errorMessage = payload?.errors?.[0]?.message || fallbackMessage;
-        toast.error(errorMessage);
+      const endpoint = getFormspreeEndpoint(FORMSPREE_ENDPOINT);
+      if (!(isSupabaseConfigured && supabase) && !endpoint) {
+        toast.error("Contact form is not configured yet.");
         return;
       }
 
       if (isSupabaseConfigured && supabase) {
         const { error: contactLogError } = await supabase.from("contact_requests").insert({
           name: parsed.data.name,
+          email: parsed.data.email,
           phone: parsed.data.phone,
           message: parsed.data.message,
+          status: "new",
           source: "website-contact-form",
         });
         if (contactLogError) {
           console.error("Unable to store contact request in Supabase:", contactLogError);
+          toast.error("Unable to submit contact request right now. Please try again.");
+          return;
+        }
+      }
+
+      if (endpoint) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), FORMSPREE_TIMEOUT_MS);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(parsed.data),
+          signal: controller.signal,
+        });
+        window.clearTimeout(timer);
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as FormspreeErrorResponse | null;
+          const errorMessage = payload?.errors?.[0]?.message || "Request saved, but notification delivery failed.";
+          toast.error(errorMessage);
         }
       }
 
       toast.success(t("form_success"));
-      setForm({ name: "", phone: "", message: "" });
+      setForm({ name: "", email: "", phone: "", message: "" });
     } catch {
       toast.error("Unable to submit right now. Please try again in a moment.");
     } finally {
@@ -189,6 +194,20 @@ export function Contact({ withHeading = true }: { withHeading?: boolean }) {
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className="mt-1.5 h-12 text-base rounded-xl"
                 maxLength={15}
+                disabled={loading}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                inputMode="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="mt-1.5 h-12 text-base rounded-xl"
+                maxLength={120}
                 disabled={loading}
                 required
               />

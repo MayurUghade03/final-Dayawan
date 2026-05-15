@@ -9,6 +9,9 @@ type ApplicationCtx = {
   loadingApplications: boolean;
   submitApplication: (data: ApplyFormData) => Promise<ServiceApplication>;
   updateApplicationStatus: (id: string, status: ApplicationStatus, adminNotes?: string) => Promise<void>;
+  updateApplicationPaymentStatus: (id: string, paymentStatus: ServiceApplication["payment_status"], paymentReference?: string, transactionId?: string) => Promise<void>;
+  deleteApplication: (id: string) => Promise<void>;
+  deleteApplicationDocument: (applicationId: string, documentIndex: number) => Promise<void>;
   findByCode: (code: string) => Promise<ServiceApplication | null>;
   myApplications: ServiceApplication[];
 };
@@ -27,7 +30,7 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "aadhaar",
     service_name: "Aadhaar Card Service",
     status: "processing",
-    payment_status: "paid",
+    payment_status: "verified",
     payment_provider: "none",
     payment_reference: "DUMMY-1024",
     amount: 50,
@@ -43,7 +46,7 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "pm-kisan",
     service_name: "PM Kisan",
     status: "ready",
-    payment_status: "paid",
+    payment_status: "verified",
     payment_provider: "none",
     payment_reference: "DUMMY-1099",
     amount: 0,
@@ -59,7 +62,7 @@ const defaultDemoData: ServiceApplication[] = [
     service_id: "pan",
     service_name: "PAN Card",
     status: "received",
-    payment_status: "paid",
+    payment_status: "verified",
     payment_provider: "none",
     payment_reference: "DUMMY-1001",
     amount: 107,
@@ -122,10 +125,11 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       status: "submitted",
       submitted_payload: data.form_payload,
       submitted_documents: data.submitted_documents,
-      payment_status: data.payment_status ?? "pending",
-      payment_provider: data.payment_provider ?? "none",
-      payment_reference: data.payment_reference,
-      amount: data.amount ?? 0,
+        payment_status: data.payment_status ?? "pending",
+        payment_provider: data.payment_provider ?? "none",
+        payment_reference: data.payment_reference,
+        transaction_id: data.transaction_id,
+        amount: data.amount ?? 0,
       created_at: now,
       updated_at: now,
     };
@@ -144,6 +148,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
         payment_status: data.payment_status ?? "pending",
         payment_provider: data.payment_provider ?? "none",
         payment_reference: data.payment_reference ?? null,
+        transaction_id: data.transaction_id ?? null,
         amount: data.amount ?? 0,
       };
 
@@ -170,6 +175,127 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     });
     return fallbackDraft;
   }, [applications, canUseSupabase, status, user, role, isSuspended]);
+
+  const updateApplicationPaymentStatus = useCallback(async (
+    id: string,
+    paymentStatus: ServiceApplication["payment_status"],
+    paymentReference?: string,
+    transactionId?: string,
+  ) => {
+    if (canUseSupabase && supabase) {
+      const payload: Database["public"]["Tables"]["service_applications"]["Update"] = {
+        payment_status: paymentStatus,
+        payment_reference: paymentReference?.trim() || null,
+        transaction_id: transactionId?.trim() || null,
+      };
+      const { data: updated, error } = await supabase
+        .from("service_applications")
+        .update(payload)
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (error || !updated) {
+        console.error("Failed to update payment status:", error);
+        throw new Error("APPLICATION_PAYMENT_UPDATE_FAILED");
+      }
+
+      const normalized = normalizeRemoteApplication(updated);
+      setApplications((prev) => prev.map((a) => (a.id === id ? normalized : a)));
+      return;
+    }
+
+    setApplications((prev) => {
+      const next = prev.map((a) =>
+        a.id === id
+          ? {
+            ...a,
+            payment_status: paymentStatus,
+            payment_reference: paymentReference?.trim() || a.payment_reference,
+            transaction_id: transactionId?.trim() || a.transaction_id,
+            updated_at: new Date().toISOString(),
+          }
+          : a,
+      );
+      saveApplications(next);
+      return next;
+    });
+  }, [canUseSupabase]);
+
+  const deleteApplication = useCallback(async (id: string) => {
+    const target = applications.find((app) => app.id === id);
+    if (!target) return;
+
+    const documentPaths = (target.submitted_documents ?? [])
+      .map((item) => item.path)
+      .filter((path): path is string => Boolean(path));
+
+    if (canUseSupabase && supabase) {
+      const { error } = await supabase.from("service_applications").delete().eq("id", id);
+      if (error) {
+        console.error("Failed to delete application:", error);
+        throw new Error("APPLICATION_DELETE_FAILED");
+      }
+      if (documentPaths.length > 0) {
+        const { error: storageError } = await supabase.storage.from("application-documents").remove(documentPaths);
+        if (storageError) console.error("Failed to delete application documents:", storageError);
+      }
+      setApplications((prev) => prev.filter((app) => app.id !== id));
+      return;
+    }
+
+    setApplications((prev) => {
+      const next = prev.filter((app) => app.id !== id);
+      saveApplications(next);
+      return next;
+    });
+  }, [applications, canUseSupabase]);
+
+  const deleteApplicationDocument = useCallback(async (applicationId: string, documentIndex: number) => {
+    const target = applications.find((app) => app.id === applicationId);
+    if (!target?.submitted_documents || documentIndex < 0 || documentIndex >= target.submitted_documents.length) {
+      return;
+    }
+    const doc = target.submitted_documents[documentIndex];
+
+    if (canUseSupabase && supabase) {
+      if (doc.path) {
+        const { error: storageError } = await supabase.storage.from("application-documents").remove([doc.path]);
+        if (storageError) {
+          console.error("Failed to delete document from storage:", storageError);
+          throw new Error("APPLICATION_DOCUMENT_DELETE_FAILED");
+        }
+      }
+      const nextDocs = target.submitted_documents.filter((_, index) => index !== documentIndex);
+      const { data: updated, error } = await supabase
+        .from("service_applications")
+        .update({ submitted_documents: nextDocs.length ? nextDocs : null })
+        .eq("id", applicationId)
+        .select("*")
+        .single();
+      if (error || !updated) {
+        console.error("Failed to update application documents:", error);
+        throw new Error("APPLICATION_DOCUMENT_DELETE_FAILED");
+      }
+      const normalized = normalizeRemoteApplication(updated);
+      setApplications((prev) => prev.map((app) => (app.id === applicationId ? normalized : app)));
+      return;
+    }
+
+    setApplications((prev) => {
+      const next = prev.map((app) => {
+        if (app.id !== applicationId) return app;
+        const docs = (app.submitted_documents ?? []).filter((_, index) => index !== documentIndex);
+        return {
+          ...app,
+          submitted_documents: docs.length ? docs : undefined,
+          updated_at: new Date().toISOString(),
+        };
+      });
+      saveApplications(next);
+      return next;
+    });
+  }, [applications, canUseSupabase]);
 
   const updateApplicationStatus = useCallback(async (id: string, status: ApplicationStatus, adminNotes?: string) => {
     if (canUseSupabase && supabase) {
@@ -236,7 +362,17 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
 
   return (
     <ApplicationContext.Provider
-      value={{ applications, loadingApplications, submitApplication, updateApplicationStatus, findByCode, myApplications }}
+      value={{
+        applications,
+        loadingApplications,
+        submitApplication,
+        updateApplicationStatus,
+        updateApplicationPaymentStatus,
+        deleteApplication,
+        deleteApplicationDocument,
+        findByCode,
+        myApplications,
+      }}
     >
       {children}
     </ApplicationContext.Provider>
@@ -304,9 +440,10 @@ function normalizeRemoteApplication(row: Database["public"]["Tables"]["service_a
       admin_notes: row.admin_notes ?? undefined,
       submitted_payload: row.submitted_payload ?? undefined,
       submitted_documents: normalizeSubmittedDocuments(row.submitted_documents),
-      payment_status: row.payment_status,
+      payment_status: normalizePaymentStatus(row.payment_status),
       payment_provider: row.payment_provider ?? "none",
       payment_reference: row.payment_reference ?? undefined,
+      transaction_id: row.transaction_id ?? undefined,
       amount: row.amount ?? 0,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -321,9 +458,10 @@ function normalizeLocalApplication(app: ServiceApplication): ServiceApplication 
         ? app.submitted_payload
         : undefined,
     submitted_documents: normalizeSubmittedDocuments(app.submitted_documents),
-    payment_status: app.payment_status ?? "pending",
+    payment_status: normalizePaymentStatus(app.payment_status),
     payment_provider: app.payment_provider ?? "none",
     payment_reference: app.payment_reference || undefined,
+    transaction_id: app.transaction_id || undefined,
     amount: Number.isFinite(app.amount) ? app.amount : 0,
   };
 }
@@ -339,13 +477,18 @@ function normalizeSubmittedDocuments(value: unknown): SubmittedDocument[] | unde
       const record = item as Record<string, unknown>;
       const name = typeof record.name === "string" ? record.name : "";
       if (!name.trim()) return null;
-      return {
-        name,
-        path: typeof record.path === "string" ? record.path : undefined,
-        url: typeof record.url === "string" ? record.url : undefined,
-        size: typeof record.size === "number" ? record.size : undefined,
-        uploaded_at: typeof record.uploaded_at === "string" ? record.uploaded_at : undefined,
-      } satisfies SubmittedDocument;
+        return {
+          name,
+          kind:
+            record.kind === "payment_proof" || record.kind === "dynamic_field_file" || record.kind === "required_document"
+              ? record.kind
+              : undefined,
+          path: typeof record.path === "string" ? record.path : undefined,
+          url: typeof record.url === "string" ? record.url : undefined,
+          mime_type: typeof record.mime_type === "string" ? record.mime_type : undefined,
+          size: typeof record.size === "number" ? record.size : undefined,
+          uploaded_at: typeof record.uploaded_at === "string" ? record.uploaded_at : undefined,
+        } satisfies SubmittedDocument;
     })
     .filter((item): item is SubmittedDocument => Boolean(item));
 
@@ -353,3 +496,9 @@ function normalizeSubmittedDocuments(value: unknown): SubmittedDocument[] | unde
 }
 
 export const STATUS_FLOW: ApplicationStatus[] = ["submitted", "received", "processing", "ready", "completed"];
+
+function normalizePaymentStatus(status: unknown): ServiceApplication["payment_status"] {
+  if (status === "verified" || status === "rejected" || status === "pending") return status;
+  if (status === "paid") return "verified";
+  return "pending";
+}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -21,6 +21,8 @@ const RegisterPage = () => {
   const { t } = useLang();
   const { signUp, isConfigured } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   const [form, setForm] = useState({
     name: "",
@@ -47,8 +49,8 @@ const RegisterPage = () => {
     setLoading(false);
 
     if (!error) {
-      toast.success(t("register_success"));
-      navigate("/login");
+      toast.success("Registration successful. Please verify your email before login.");
+      navigate("/verify-email", { state: { email: form.email.trim().toLowerCase(), from } });
       return;
     }
 
@@ -70,6 +72,7 @@ const RegisterPage = () => {
           </Link>
           <Link
             to="/login"
+            state={{ from }}
             className="text-sm font-semibold text-primary hover:underline min-h-0"
           >
             {t("nav_login")}
@@ -86,7 +89,7 @@ const RegisterPage = () => {
             </h1>
             <p className="text-sm text-muted-foreground">
               {t("register_sub")}{" "}
-              <Link to="/login" className="text-primary font-semibold hover:underline min-h-0">
+              <Link to="/login" state={{ from }} className="text-primary font-semibold hover:underline min-h-0">
                 {t("nav_login")}
               </Link>
             </p>

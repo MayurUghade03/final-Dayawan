@@ -3,8 +3,8 @@
 export type Lang = "mr" | "hi" | "en";
 
 export type ServiceCategory = "gov" | "farm" | "online";
-export type PaymentProvider = "none" | "stripe" | "razorpay";
-export type FormFieldType = "text" | "number" | "date" | "textarea";
+export type PaymentProvider = "none" | "stripe" | "razorpay" | "manual_qr";
+export type FormFieldType = "text" | "number" | "date" | "textarea" | "select" | "file" | "checkbox" | "radio";
 export type UserRole = "admin" | "citizen";
 export type UserStatus = "active" | "suspended";
 export type ThemeMode = "light" | "dark" | "system";
@@ -24,6 +24,7 @@ export interface ServiceItem {
 
 export interface ContactFormData {
   name: string;
+  email: string;
   phone: string;
   message: string;
 }
@@ -55,9 +56,10 @@ export interface ServiceApplication {
   admin_notes?: string;
   submitted_payload?: Record<string, string>;
   submitted_documents?: SubmittedDocument[];
-  payment_status: "pending" | "paid";
+  payment_status: "pending" | "verified" | "rejected" | "paid";
   payment_provider: PaymentProvider;
   payment_reference?: string;
+  transaction_id?: string;
   amount: number;
   created_at: string;
   updated_at: string;
@@ -70,16 +72,19 @@ export interface ApplyFormData {
   service_name: string;
   form_payload?: Record<string, string>;
   submitted_documents?: SubmittedDocument[];
-  payment_status?: "pending" | "paid";
+  payment_status?: "pending" | "verified" | "rejected" | "paid";
   payment_provider?: PaymentProvider;
   payment_reference?: string;
+  transaction_id?: string;
   amount?: number;
 }
 
 export interface SubmittedDocument {
   name: string;
+  kind?: "required_document" | "dynamic_field_file" | "payment_proof";
   path?: string;
   url?: string;
+  mime_type?: string;
   size?: number;
   uploaded_at?: string;
 }
@@ -101,6 +106,7 @@ export interface ServiceFormField {
   key: string;
   label: string;
   type: FormFieldType;
+  options?: string[];
   required: boolean;
 }
 
@@ -115,6 +121,7 @@ export interface ManagedService {
   fee_amount: number;
   fee_note?: string;
   payment_provider: PaymentProvider;
+  payment_qr_image_url?: string;
   form_schema: ServiceFormField[];
   active: boolean;
 }
@@ -158,9 +165,10 @@ export interface Database {
           admin_notes: string | null;
           submitted_payload: Record<string, string> | null;
           submitted_documents: SubmittedDocument[] | null;
-          payment_status: "pending" | "paid";
+          payment_status: "pending" | "verified" | "rejected" | "paid";
           payment_provider: PaymentProvider | null;
           payment_reference: string | null;
+          transaction_id: string | null;
           amount: number | null;
           created_at: string;
           updated_at: string;
@@ -178,9 +186,10 @@ export interface Database {
           admin_notes?: string | null;
           submitted_payload?: Record<string, string> | null;
           submitted_documents?: SubmittedDocument[] | null;
-          payment_status?: "pending" | "paid";
+          payment_status?: "pending" | "verified" | "rejected" | "paid";
           payment_provider?: PaymentProvider | null;
           payment_reference?: string | null;
+          transaction_id?: string | null;
           amount?: number | null;
           created_at?: string;
           updated_at?: string;
@@ -197,9 +206,10 @@ export interface Database {
           admin_notes?: string | null;
           submitted_payload?: Record<string, string> | null;
           submitted_documents?: SubmittedDocument[] | null;
-          payment_status?: "pending" | "paid";
+          payment_status?: "pending" | "verified" | "rejected" | "paid";
           payment_provider?: PaymentProvider | null;
           payment_reference?: string | null;
+          transaction_id?: string | null;
           amount?: number | null;
           created_at?: string;
           updated_at?: string;
@@ -217,6 +227,7 @@ export interface Database {
           fee_amount: number;
           fee_note: string | null;
           payment_provider: PaymentProvider;
+          payment_qr_image_url: string | null;
           form_schema: ServiceFormField[];
           active: boolean;
           created_at: string;
@@ -233,6 +244,7 @@ export interface Database {
           fee_amount?: number;
           fee_note?: string | null;
           payment_provider?: PaymentProvider;
+          payment_qr_image_url?: string | null;
           form_schema?: ServiceFormField[];
           active?: boolean;
           created_at?: string;
@@ -248,6 +260,7 @@ export interface Database {
           fee_amount?: number;
           fee_note?: string | null;
           payment_provider?: PaymentProvider;
+          payment_qr_image_url?: string | null;
           form_schema?: ServiceFormField[];
           active?: boolean;
         };
@@ -256,9 +269,10 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          email: string;
           phone: string;
           message: string;
-          status: "new" | "in_progress" | "resolved";
+          status: "new" | "read" | "replied" | "in_progress" | "resolved";
           source: string;
           created_at: string;
           updated_at: string;
@@ -266,18 +280,20 @@ export interface Database {
         Insert: {
           id?: string;
           name: string;
+          email: string;
           phone: string;
           message: string;
-          status?: "new" | "in_progress" | "resolved";
+          status?: "new" | "read" | "replied" | "in_progress" | "resolved";
           source?: string;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           name?: string;
+          email?: string;
           phone?: string;
           message?: string;
-          status?: "new" | "in_progress" | "resolved";
+          status?: "new" | "read" | "replied" | "in_progress" | "resolved";
           source?: string;
           updated_at?: string;
         };
