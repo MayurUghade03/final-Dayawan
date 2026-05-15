@@ -13,7 +13,8 @@ create table if not exists public.services (
   required_documents jsonb not null default '[]'::jsonb,
   fee_amount numeric(10,2) not null default 0,
   fee_note text,
-  payment_provider text not null default 'none' check (payment_provider in ('none', 'stripe', 'razorpay')),
+  payment_provider text not null default 'none' check (payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr')),
+  payment_qr_image_url text,
   form_schema jsonb not null default '[]'::jsonb,
   active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -71,9 +72,10 @@ create table if not exists public.service_applications (
   admin_notes text,
   submitted_payload jsonb,
   submitted_documents jsonb,
-  payment_status text not null default 'pending' check (payment_status in ('pending', 'paid')),
-  payment_provider text check (payment_provider in ('none', 'stripe', 'razorpay')),
+  payment_status text not null default 'pending' check (payment_status in ('pending', 'verified', 'rejected', 'paid')),
+  payment_provider text check (payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr')),
   payment_reference text,
+  transaction_id text,
   amount numeric(10,2) default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -82,9 +84,10 @@ create table if not exists public.service_applications (
 create table if not exists public.contact_requests (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  email text not null,
   phone text not null,
   message text not null,
-  status text not null default 'new' check (status in ('new', 'in_progress', 'resolved')),
+  status text not null default 'new' check (status in ('new', 'read', 'replied', 'in_progress', 'resolved')),
   source text not null default 'website-contact-form',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -97,25 +100,53 @@ alter table public.service_applications
   add column if not exists payment_status text default 'pending',
   add column if not exists payment_provider text,
   add column if not exists payment_reference text,
+  add column if not exists transaction_id text,
   add column if not exists amount numeric(10,2) default 0;
 
 alter table public.services
-  add column if not exists image_url text;
+  add column if not exists image_url text,
+  add column if not exists payment_qr_image_url text;
+
+alter table public.contact_requests
+  add column if not exists email text,
+  add column if not exists status text default 'new';
+
+update public.contact_requests
+set email = coalesce(nullif(trim(email), ''), 'unknown@example.com')
+where email is null or length(trim(email)) = 0;
 
 update public.service_applications
 set payment_status = coalesce(payment_status, 'pending')
 where payment_status is null;
+
+update public.service_applications
+set payment_status = 'verified'
+where payment_status = 'paid';
 
 alter table public.service_applications
   alter column payment_status set not null;
 
 alter table public.service_applications
   drop constraint if exists service_applications_payment_status_check,
-  add constraint service_applications_payment_status_check check (payment_status in ('pending', 'paid'));
+  add constraint service_applications_payment_status_check check (payment_status in ('pending', 'verified', 'rejected'));
 
 alter table public.service_applications
   drop constraint if exists service_applications_payment_provider_check,
-  add constraint service_applications_payment_provider_check check (payment_provider is null or payment_provider in ('none', 'stripe', 'razorpay'));
+  add constraint service_applications_payment_provider_check check (payment_provider is null or payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr'));
+
+update public.contact_requests
+set status = case
+  when status = 'resolved' then 'replied'
+  when status = 'in_progress' then 'read'
+  else coalesce(status, 'new')
+end;
+
+alter table public.contact_requests
+  alter column email set not null;
+
+alter table public.contact_requests
+  drop constraint if exists contact_requests_status_check,
+  add constraint contact_requests_status_check check (status in ('new', 'read', 'replied'));
 
 create index if not exists idx_services_active on public.services(active);
 create index if not exists idx_service_applications_user_id on public.service_applications(user_id);
@@ -575,13 +606,13 @@ with check (
 insert into public.services (id, category, title, description, details, image_url, required_documents, fee_amount, fee_note, payment_provider, form_schema, active)
 values
   ('aadhaar', 'gov', 'Aadhaar Card Service', 'New Aadhaar, update, correction', 'New Aadhaar enrolment, name/address/DOB correction and mobile update — all in one place.', null, '["ID proof", "Address proof", "Photo"]'::jsonb, 50, 'From ₹50', 'none', '[{"id":"aadhaar-gender","key":"gender","label":"Gender","type":"text","required":false}]'::jsonb, true),
-  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', 'New PAN application, corrections and re-print — quickly.', null, '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'stripe', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
+  ('pan', 'gov', 'PAN Card', 'New PAN card and corrections', 'New PAN application, corrections and re-print — quickly.', null, '["Aadhaar card", "Birth certificate"]'::jsonb, 107, 'From ₹107', 'manual_qr', '[{"id":"pan-father-name","key":"father_name","label":"Father Name","type":"text","required":true}]'::jsonb, true),
   ('rationcard', 'gov', 'Ration Card', 'New ration card, add member', 'Apply for new ration card and member updates.', null, '["Aadhaar card", "Income certificate"]'::jsonb, 0, 'Nominal fee', 'none', '[]'::jsonb, true),
   ('pmkisan', 'farm', 'PM Kisan Yojana', '₹6000/year support for farmers', 'Enrolment and updates for PM Kisan assistance.', null, '["Aadhaar card", "7/12 land record", "Bank passbook"]'::jsonb, 0, 'Free enrolment', 'none', '[]'::jsonb, true),
   ('cropinsurance', 'farm', 'Crop Insurance', 'Protection from natural calamities', 'Crop insurance registration and claim support.', null, '["7/12 record", "Aadhaar card"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
   ('soilcard', 'farm', 'Soil Health Card', 'Soil testing and advice', 'Register for soil health card and land sample guidance.', null, '["7/12 record"]'::jsonb, 0, null, 'none', '[]'::jsonb, true),
-  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', null, '["Bill copy"]'::jsonb, 0, null, 'razorpay', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
-  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', null, '["Mobile number"]'::jsonb, 0, null, 'razorpay', '[]'::jsonb, true),
+  ('bill', 'online', 'Electricity / Water Bill', 'Pay all bills at one place', 'Bill payment support for electricity and water services.', null, '["Bill copy"]'::jsonb, 0, null, 'manual_qr', '[{"id":"bill-consumer","key":"consumer_number","label":"Consumer Number","type":"text","required":true}]'::jsonb, true),
+  ('recharge', 'online', 'Mobile Recharge / DTH', 'All networks and DTH', 'Recharge support for all operators.', null, '["Mobile number"]'::jsonb, 0, null, 'manual_qr', '[]'::jsonb, true),
   ('print', 'online', 'Print / Xerox / Scan', 'Affordable document services', 'Print, photocopy and scan support.', null, '["Original document"]'::jsonb, 0, null, 'none', '[]'::jsonb, true)
 -- Preserve existing admin-managed service data; only seed missing IDs.
 on conflict (id) do nothing;

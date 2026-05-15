@@ -23,6 +23,11 @@ function isRateLimitError(error: { status?: number; message?: string }) {
   return error.status === 429;
 }
 
+function isEmailVerificationError(error: { message?: string }) {
+  const message = (error.message ?? "").toLowerCase();
+  return message.includes("email not confirmed") || message.includes("email not verified");
+}
+
 function getRateLimitCooldownMs() {
   const rawValue = import.meta.env.VITE_AUTH_RATE_LIMIT_COOLDOWN_MS;
   const parsed = Number(rawValue);
@@ -106,6 +111,14 @@ const LoginPage = () => {
         return;
       }
 
+      if (isEmailVerificationError(error)) {
+        toast.error("Please verify your email before logging in.");
+        navigate("/verify-email", {
+          state: { email: form.email.trim().toLowerCase() },
+        });
+        return;
+      }
+
       if (error.status === 400 || error.status === 401) {
         toast.error(t("login_err_credentials"));
       } else {
@@ -132,6 +145,7 @@ const LoginPage = () => {
           </Link>
           <Link
             to="/register"
+            state={{ from }}
             className="text-sm font-semibold text-primary hover:underline min-h-0"
           >
             {t("nav_register")}
@@ -148,7 +162,7 @@ const LoginPage = () => {
             </h1>
             <p className="text-sm text-muted-foreground">
               {t("login_sub")}{" "}
-              <Link to="/register" className="text-primary font-semibold hover:underline min-h-0">
+              <Link to="/register" state={{ from }} className="text-primary font-semibold hover:underline min-h-0">
                 {t("nav_register")}
               </Link>
             </p>

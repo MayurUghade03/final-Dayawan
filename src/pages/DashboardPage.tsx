@@ -70,7 +70,7 @@ const DashboardPage = () => {
                       </div>
                     </div>
                     <div className="mt-3 text-xs text-muted-foreground">
-                      Payment: {app.payment_status === "paid" ? "Paid" : "Pending"} {app.payment_reference ? `(${app.payment_reference})` : ""}
+                      Payment: {formatPaymentStatus(app.payment_status)} {app.payment_reference ? `(${app.payment_reference})` : ""} {app.transaction_id ? `• ${app.transaction_id}` : ""}
                     </div>
                   </div>
                 ))}
@@ -85,3 +85,9 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
+
+function formatPaymentStatus(status: string): string {
+  if (status === "verified" || status === "paid") return "Verified";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
+}

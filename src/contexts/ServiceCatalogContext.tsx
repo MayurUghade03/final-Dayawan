@@ -28,6 +28,7 @@ const defaultServices: ManagedService[] = SERVICES.map((service) => ({
   fee_amount: parseFeeAmount(service.fee?.en),
   fee_note: service.fee?.en,
   payment_provider: "none",
+  payment_qr_image_url: "",
   form_schema: [],
   active: true,
 }));
@@ -88,14 +89,15 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
         fee_amount: normalized.fee_amount,
         fee_note: normalized.fee_note ?? null,
         payment_provider: normalized.payment_provider,
+        payment_qr_image_url: normalized.payment_qr_image_url ?? null,
         form_schema: normalized.form_schema,
         active: normalized.active,
       };
 
       const { error } = await supabase.from("services").upsert(payload, { onConflict: "id" });
       if (error) {
-        if (isMissingImageUrlColumnError(error)) {
-          const { image_url, ...legacyPayload } = payload;
+        if (isLegacyServicesColumnError(error)) {
+          const { image_url, payment_qr_image_url, ...legacyPayload } = payload;
           const { error: legacyError } = await supabase.from("services").upsert(legacyPayload, { onConflict: "id" });
           if (legacyError) {
             console.error("Failed to upsert service:", legacyError);
@@ -165,6 +167,7 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
     fee_amount: 0,
     fee_note: "",
     payment_provider: "none",
+    payment_qr_image_url: "",
     form_schema: [],
     active: true,
   }), []);
@@ -230,6 +233,7 @@ function normalizeManagedService(service: ManagedService): ManagedService {
     fee_amount: Number.isFinite(service.fee_amount) ? Math.max(0, service.fee_amount) : 0,
     fee_note: service.fee_note?.trim() || "",
     payment_provider: service.payment_provider,
+    payment_qr_image_url: service.payment_qr_image_url?.trim() || "",
     form_schema: service.form_schema.map(normalizeFormField),
     active: service.active !== false,
   };
@@ -241,6 +245,7 @@ function normalizeFormField(field: ServiceFormField): ServiceFormField {
     key: field.key.trim() || field.id || `field_${crypto.randomUUID().replace(/-/g, "")}`,
     label: field.label.trim() || "Additional detail",
     type: field.type,
+    options: Array.isArray(field.options) ? field.options.map((item) => item.trim()).filter(Boolean) : [],
     required: Boolean(field.required),
   };
 }
@@ -275,6 +280,7 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
     fee_amount: Number(row.fee_amount ?? 0),
     fee_note: row.fee_note ?? undefined,
     payment_provider: row.payment_provider,
+    payment_qr_image_url: row.payment_qr_image_url ?? undefined,
     form_schema: safeFormSchema
       .filter((field): field is ServiceFormField => Boolean(field && typeof field === "object"))
       .map((field) => normalizeFormField(field)),
@@ -282,6 +288,8 @@ function normalizeRemoteService(row: Database["public"]["Tables"]["services"]["R
   });
 }
 
-function isMissingImageUrlColumnError(error: { code?: string | null; message?: string | null }): boolean {
-  return error.code === "PGRST204" && (error.message?.toLowerCase().includes("image_url") ?? false);
+function isLegacyServicesColumnError(error: { code?: string | null; message?: string | null }): boolean {
+  if (error.code !== "PGRST204") return false;
+  const message = error.message?.toLowerCase() ?? "";
+  return message.includes("image_url") || message.includes("payment_qr_image_url");
 }
