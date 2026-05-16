@@ -143,6 +143,11 @@ set status = case
   when status = 'resolved' then 'replied'
   when status = 'in_progress' then 'read'
   else coalesce(status, 'new')
+end
+where status is distinct from case
+  when status = 'resolved' then 'replied'
+  when status = 'in_progress' then 'read'
+  else coalesce(status, 'new')
 end;
 
 alter table public.contact_requests
