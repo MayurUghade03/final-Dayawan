@@ -101,13 +101,27 @@ Admin access is controlled by:
 Admin panel capabilities:
 - Update service title/description/details
 - Update required documents and service charges
-- Configure payment readiness (`none` / `stripe` / `razorpay`) with dummy payment flow
+- Configure payment readiness (`none` / `stripe` / `razorpay` / `manual_qr`) and upload QR image directly from device
 - Create/edit service-specific form fields used on “Apply” page
 - Update application lifecycle status
 - Manage users (edit details, role, suspension)
 - View uploaded application documents from admin queue
 
 For simple setup, keep admin emails in `.env` and use the bootstrap admin account.
+
+---
+
+## Manual update needed for existing Supabase projects
+
+If your Supabase project was already running before this update, run the following SQL once in Supabase SQL Editor (this is already included in `supabase/schema.sql` for fresh setups):
+
+```sql
+alter table public.services
+  drop constraint if exists services_fee_amount_integer_check,
+  add constraint services_fee_amount_integer_check check (fee_amount >= 0 and fee_amount = trunc(fee_amount)) not valid;
+```
+
+This keeps existing rows untouched and blocks new/updated decimal service charges (only whole numbers like 100, 250 are accepted).
 
 ---
 

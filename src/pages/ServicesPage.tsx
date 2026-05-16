@@ -16,7 +16,7 @@ const ServicesPage = () => {
             <p className="text-muted-foreground">{t("services_sub")}</p>
           </div>
         </section>
-        <Services />
+        <Services showHeader={false} />
       </main>
       <Footer />
     </div>
