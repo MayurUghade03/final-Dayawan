@@ -14,11 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { useTheme } from "@/contexts/ThemeContext";
-import { AppTheme, THEME_TOKEN_FIELDS } from "@/theme/themes";
-import { Download, Eye, FileText, FolderOpen, Phone, Search, Settings, Trash2, Users } from "lucide-react";
+import { Download, Eye, FileText, FolderOpen, Phone, Search, Trash2, Users } from "lucide-react";
 
-type AdminSection = "overview" | "services" | "users" | "documents" | "queue" | "contacts" | "settings";
+type AdminSection = "overview" | "services" | "users" | "documents" | "queue" | "contacts";
 type ContactRequestStatus = "new" | "read" | "replied" | "in_progress" | "resolved";
 type ContactRequest = Database["public"]["Tables"]["contact_requests"]["Row"];
 
@@ -37,9 +35,7 @@ const SECTIONS: Array<{ id: AdminSection; label: string; icon: typeof FileText }
   { id: "documents", label: "Document Management", icon: FileText },
   { id: "queue", label: "Application Queue", icon: FileText },
   { id: "contacts", label: "Contact Requests", icon: Phone },
-  { id: "settings", label: "Settings", icon: Settings },
 ];
-const MAX_THEME_OPTIONS = 3;
 
 const AdminPage = () => {
   const { t } = useLang();
@@ -52,15 +48,6 @@ const AdminPage = () => {
     deleteApplicationDocument,
   } = useApplications();
   const { services, upsertService, deleteService, setServiceActive, createServiceDraft } = useServiceCatalog();
-  const {
-    themes,
-    globalDefaultThemeId,
-    upsertTheme,
-    setThemeActive,
-    setGlobalDefaultTheme,
-    selectedThemeId,
-    setSelectedThemeId,
-  } = useTheme();
 
   const [activeSection, setActiveSection] = useState<AdminSection>("overview");
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
@@ -69,9 +56,6 @@ const AdminPage = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingUserId, setSavingUserId] = useState<string>("");
-  const [selectedThemeEditorId, setSelectedThemeEditorId] = useState<string>("");
-  const [savingTheme, setSavingTheme] = useState(false);
-  const [themeDraft, setThemeDraft] = useState<AppTheme | null>(null);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [updatingContactId, setUpdatingContactId] = useState<string>("");
@@ -95,10 +79,6 @@ const AdminPage = () => {
       });
     }
   }, [selectedServiceId, services]);
-
-  useEffect(() => {
-    if (!selectedThemeEditorId && themes.length > 0) setSelectedThemeEditorId(themes[0].id);
-  }, [selectedThemeEditorId, themes]);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -126,20 +106,6 @@ const AdminPage = () => {
     () => services.map((service) => ({ id: service.id, label: `${service.title}${service.active ? "" : " (Inactive)"}` })),
     [services],
   );
-  const themeOptions = useMemo(() => themes.slice(0, MAX_THEME_OPTIONS).map((theme) => ({ id: theme.id, label: theme.name })), [themes]);
-  const editingTheme = useMemo(() => themes.find((theme) => theme.id === selectedThemeEditorId) ?? null, [themes, selectedThemeEditorId]);
-
-  useEffect(() => {
-    if (!editingTheme) {
-      setThemeDraft(null);
-      return;
-    }
-    setThemeDraft({
-      ...editingTheme,
-      tokens: { ...editingTheme.tokens },
-    });
-  }, [editingTheme]);
-
   const documentEntries = useMemo(() => (
     applications.flatMap((app) =>
       (app.submitted_documents ?? []).map((documentItem, index) => ({
@@ -197,6 +163,10 @@ const AdminPage = () => {
       toast.error("Service title and description are required.");
       return;
     }
+    if (!Number.isInteger(editingService.fee_amount) || editingService.fee_amount < 0) {
+      toast.error("Charge amount must be a whole number (e.g. 100, 250).");
+      return;
+    }
     setSavingService(true);
     try {
       await upsertService({
@@ -205,8 +175,12 @@ const AdminPage = () => {
       });
       toast.success("Service updated.");
       setSelectedServiceId(editingService.id);
-    } catch {
-      toast.error("Failed to update service.");
+    } catch (error) {
+      if (error instanceof Error && error.message === "SERVICE_FEE_INVALID") {
+        toast.error("Charge amount must be a whole number (e.g. 100, 250).");
+      } else {
+        toast.error("Failed to update service.");
+      }
     } finally {
       setSavingService(false);
     }
@@ -266,19 +240,6 @@ const AdminPage = () => {
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const saveTheme = async () => {
-    if (!themeDraft) return;
-    setSavingTheme(true);
-    try {
-      await upsertTheme(themeDraft);
-      toast.success("Theme updated.");
-    } catch {
-      toast.error("Failed to save theme.");
-    } finally {
-      setSavingTheme(false);
-    }
   };
 
   const updateContactStatus = async (request: ContactRequest, nextStatus: ContactRequestStatus) => {
@@ -394,16 +355,26 @@ const AdminPage = () => {
                         <Input id="service-description" value={editingService.description} onChange={(e) => setEditingService((prev) => prev ? { ...prev, description: e.target.value } : prev)} className="mt-1.5" />
                       </div>
                       <div className="md:col-span-2">
-                        <Label htmlFor="service-image-url">Image URL</Label>
-                        <Input id="service-image-url" value={editingService.image_url || ""} onChange={(e) => setEditingService((prev) => prev ? { ...prev, image_url: e.target.value } : prev)} className="mt-1.5" />
-                      </div>
-                      <div className="md:col-span-2">
                         <Label htmlFor="service-details">Detailed content</Label>
                         <Textarea id="service-details" value={editingService.details || ""} onChange={(e) => setEditingService((prev) => prev ? { ...prev, details: e.target.value } : prev)} className="mt-1.5" />
                       </div>
                       <div>
                         <Label htmlFor="service-fee">Charge amount</Label>
-                        <Input id="service-fee" type="number" min={0} step="0.01" value={editingService.fee_amount} onChange={(e) => setEditingService((prev) => prev ? { ...prev, fee_amount: Number(e.target.value || 0) } : prev)} className="mt-1.5" />
+                        <Input
+                          id="service-fee"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={editingService.fee_amount}
+                          onChange={(e) => {
+                            const rawValue = e.target.value;
+                            if (rawValue.includes(".")) return;
+                            const nextValue = Number(rawValue || 0);
+                            if (!Number.isFinite(nextValue)) return;
+                            setEditingService((prev) => prev ? { ...prev, fee_amount: Math.max(0, nextValue) } : prev);
+                          }}
+                          className="mt-1.5"
+                        />
                       </div>
                       <div>
                         <Label htmlFor="service-payment">Payment readiness</Label>
@@ -414,15 +385,52 @@ const AdminPage = () => {
                           <option value="razorpay">Razorpay (legacy)</option>
                         </select>
                       </div>
-                      <div>
-                        <Label htmlFor="service-qr-image-url">Payment QR image URL</Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="service-qr-upload">Payment QR image</Label>
                         <Input
-                          id="service-qr-image-url"
-                          value={editingService.payment_qr_image_url || ""}
-                          onChange={(e) => setEditingService((prev) => prev ? { ...prev, payment_qr_image_url: e.target.value } : prev)}
+                          id="service-qr-upload"
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const input = e.currentTarget;
+                            const file = input.files?.[0];
+                            if (!file) return;
+                            if (!file.type.startsWith("image/")) {
+                              toast.error("Please upload an image file for payment QR.");
+                              input.value = "";
+                              return;
+                            }
+                            try {
+                              const dataUrl = await fileToDataUrl(file);
+                              setEditingService((prev) => prev ? { ...prev, payment_qr_image_url: dataUrl } : prev);
+                            } catch {
+                              toast.error("Failed to read selected QR image.");
+                            } finally {
+                              input.value = "";
+                            }
+                          }}
                           className="mt-1.5"
-                          placeholder="https://..."
                         />
+                        {editingService.payment_qr_image_url && (
+                          <div className="space-y-2">
+                            <div className="rounded-lg overflow-hidden border border-border bg-background max-w-xs">
+                              <img
+                                src={editingService.payment_qr_image_url}
+                                alt={`${editingService.title || "Service"} payment QR preview`}
+                                className="w-full h-auto object-contain"
+                                loading="lazy"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingService((prev) => prev ? { ...prev, payment_qr_image_url: "" } : prev)}
+                            >
+                              Remove QR image
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       <div className="md:col-span-2">
                         <Label htmlFor="service-fee-note">Fee note</Label>
@@ -430,76 +438,22 @@ const AdminPage = () => {
                       </div>
                       <div className="md:col-span-2">
                         <Label htmlFor="service-docs">Required documents (one per line)</Label>
-                        <div id="service-docs" className="mt-1.5 space-y-2">
-                          {editingService.required_documents.map((item, index) => (
-                            <div key={`${index}-${item}`} className="flex items-center gap-2">
-                              <Input
-                                value={item}
-                                onChange={(e) =>
-                                  setEditingService((prev) =>
-                                    prev
-                                      ? {
-                                        ...prev,
-                                        required_documents: prev.required_documents.map((doc, docIndex) => (docIndex === index ? e.target.value : doc)),
-                                      }
-                                      : prev,
-                                  )
+                        <Textarea
+                          id="service-docs"
+                          className="mt-1.5 min-h-28"
+                          value={editingService.required_documents.join("\n")}
+                          onChange={(e) =>
+                            setEditingService((prev) =>
+                              prev
+                                ? {
+                                  ...prev,
+                                  required_documents: e.target.value.split(/\r?\n/),
                                 }
-                                onKeyDown={(e) => {
-                                  if (e.key !== "Enter") return;
-                                  e.preventDefault();
-                                  setEditingService((prev) =>
-                                    prev
-                                      ? {
-                                        ...prev,
-                                        required_documents: [
-                                          ...prev.required_documents.slice(0, index + 1),
-                                          "",
-                                          ...prev.required_documents.slice(index + 1),
-                                        ],
-                                      }
-                                      : prev,
-                                  );
-                                }}
-                                placeholder="Document name"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  setEditingService((prev) =>
-                                    prev
-                                      ? {
-                                        ...prev,
-                                        required_documents: prev.required_documents.filter((_, docIndex) => docIndex !== index),
-                                      }
-                                      : prev,
-                                  )
-                                }
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          ))}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setEditingService((prev) =>
-                                prev
-                                  ? {
-                                    ...prev,
-                                    required_documents: [...prev.required_documents, ""],
-                                  }
-                                  : prev,
-                              )
-                            }
-                          >
-                            Add document row
-                          </Button>
-                        </div>
+                                : prev,
+                            )
+                          }
+                          placeholder={"Aadhaar Card\nPAN Card\nBirth Certificate"}
+                        />
                       </div>
                       <div className="md:col-span-2 space-y-3">
                         <div className="flex items-center justify-between">
@@ -826,42 +780,6 @@ const AdminPage = () => {
                 </div>
               )}
 
-              {activeSection === "settings" && (
-                <div className="card-soft p-5 space-y-4">
-                  <h2 className="font-bold text-xl">Settings</h2>
-                  <div>
-                    <Label htmlFor="theme-select">Theme</Label>
-                    <select id="theme-select" value={selectedThemeEditorId} onChange={(e) => setSelectedThemeEditorId(e.target.value)} className="w-full rounded-xl border border-border bg-background h-10 px-3 text-sm mt-1.5">
-                      {themeOptions.map((option) => (
-                        <option key={option.id} value={option.id}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {themeDraft && (
-                    <>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {THEME_TOKEN_FIELDS.map((field) => (
-                          <div key={field.key}>
-                            <Label htmlFor={`token-${field.key}`}>{field.label}</Label>
-                            <Input
-                              id={`token-${field.key}`}
-                              value={themeDraft.tokens[field.key] ?? ""}
-                              onChange={(e) => setThemeDraft((prev) => prev ? { ...prev, tokens: { ...prev.tokens, [field.key]: e.target.value } } : prev)}
-                              className="mt-1.5"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" onClick={() => void saveTheme()} disabled={savingTheme}>{savingTheme ? "Saving..." : "Save theme"}</Button>
-                        <Button type="button" variant="outline" onClick={() => void setThemeActive(themeDraft.id, !themeDraft.active)}>{themeDraft.active ? "Deactivate" : "Activate"}</Button>
-                        <Button type="button" variant="outline" onClick={() => void setGlobalDefaultTheme(themeDraft.id)} disabled={globalDefaultThemeId === themeDraft.id}>{globalDefaultThemeId === themeDraft.id ? "Global default theme" : "Set as global default"}</Button>
-                        <Button type="button" variant="ghost" onClick={() => setSelectedThemeId(themeDraft.id)} disabled={selectedThemeId === themeDraft.id}>{selectedThemeId === themeDraft.id ? "Preview active" : "Preview in this session"}</Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </section>
@@ -912,6 +830,21 @@ function formatPaymentStatus(status: string): string {
   if (normalized === "verified") return "Verified";
   if (normalized === "rejected") return "Rejected";
   return "Pending";
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("INVALID_FILE_DATA"));
+    };
+    reader.onerror = () => reject(new Error("FILE_READ_FAILED"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
