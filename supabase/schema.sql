@@ -11,7 +11,7 @@ create table if not exists public.services (
   details text,
   image_url text,
   required_documents jsonb not null default '[]'::jsonb,
-  fee_amount numeric(10,2) not null default 0,
+  fee_amount numeric(10,2) not null default 0 check (fee_amount >= 0 and fee_amount = trunc(fee_amount)),
   fee_note text,
   payment_provider text not null default 'none' check (payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr')),
   payment_qr_image_url text,
@@ -137,6 +137,10 @@ alter table public.service_applications
 alter table public.services
   drop constraint if exists services_payment_provider_check,
   add constraint services_payment_provider_check check (payment_provider in ('none', 'stripe', 'razorpay', 'manual_qr'));
+
+alter table public.services
+  drop constraint if exists services_fee_amount_integer_check,
+  add constraint services_fee_amount_integer_check check (fee_amount >= 0 and fee_amount = trunc(fee_amount)) not valid;
 
 update public.contact_requests
 set status = case

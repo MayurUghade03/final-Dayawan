@@ -37,7 +37,7 @@ export function ServiceCard({ s }: { s: ManagedService }) {
   );
 }
 
-export function Services({ limit }: { limit?: number }) {
+export function Services({ limit, showHeader = true }: { limit?: number; showHeader?: boolean }) {
   const { t } = useLang();
   const { services } = useServiceCatalog();
   const cats: Array<keyof typeof CAT_META> = ["gov", "farm", "online"];
@@ -45,11 +45,13 @@ export function Services({ limit }: { limit?: number }) {
   return (
     <section id="services" className="section-pad bg-background">
       <div className="container-rural">
-        <div className="text-center mb-12 max-w-2xl mx-auto">
-          <div className="heading-eyebrow mb-3">{t("nav_services")}</div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-3">{t("services_title")}</h2>
-          <p className="text-muted-foreground">{t("services_sub")}</p>
-        </div>
+        {showHeader && (
+          <div className="text-center mb-12 max-w-2xl mx-auto">
+            <div className="heading-eyebrow mb-3">{t("nav_services")}</div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-3">{t("services_title")}</h2>
+            <p className="text-muted-foreground">{t("services_sub")}</p>
+          </div>
+        )}
 
         <div className="space-y-14">
           {cats.map((cat) => {

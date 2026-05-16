@@ -76,6 +76,9 @@ export function ServiceCatalogProvider({ children }: { children: ReactNode }) {
 
   const upsertService = useCallback(async (service: ManagedService) => {
     const normalized = normalizeManagedService(service);
+    if (!Number.isInteger(normalized.fee_amount) || normalized.fee_amount < 0) {
+      throw new Error("SERVICE_FEE_INVALID");
+    }
 
     if (canUseSupabase && supabase) {
       const payload: Database["public"]["Tables"]["services"]["Insert"] = {
